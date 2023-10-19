@@ -21,8 +21,45 @@ param (
         Test-Path -Path $_ 
     })]
     [string]
-    $ScriptPath='Madigan-Software/windows-dev-box-setup-scripts/dev_app_desktop.NET.ps1'
+    $ScriptPath='Madigan-Software/windows-dev-box-setup-scripts/WORK_DeveloperMachineInstall.ps1'
 )
+
+function PSCommandPath() { return $PSCommandPath }
+function ScriptName() { return $MyInvocation.ScriptName }
+function MyCommandName() { return $MyInvocation.MyCommand.Name }
+function MyCommandDefinition() {
+    # Begin of MyCommandDefinition()
+    # Note: ouput of this script shows the contents of this function, not the execution result
+    return $MyInvocation.MyCommand.Definition
+    # End of MyCommandDefinition()
+}
+function MyInvocationPSCommandPath() { return $MyInvocation.PSCommandPath }
+
+Write-Host ""
+Write-Host "PSVersion: $($PSVersionTable.PSVersion)"
+Write-Host ""
+Write-Host "`$PSCommandPath:"
+Write-Host " *   Direct: $PSCommandPath"
+Write-Host " * Function: $(PSCommandPath)"
+Write-Host ""
+<#
+Write-Host "`$MyInvocation.ScriptName:"
+Write-Host " *   Direct: $($MyInvocation.ScriptName)"
+Write-Host " * Function: $(ScriptName)"
+Write-Host ""
+Write-Host "`$MyInvocation.MyCommand.Name:"
+Write-Host " *   Direct: $($MyInvocation.MyCommand.Name)"
+Write-Host " * Function: $(MyCommandName)"
+Write-Host ""
+Write-Host "`$MyInvocation.MyCommand.Definition:"
+Write-Host " *   Direct: $($MyInvocation.MyCommand.Definition)"
+Write-Host " * Function: $(MyCommandDefinition)"
+Write-Host ""
+Write-Host "`$MyInvocation.PSCommandPath:"
+Write-Host " *   Direct: $($MyInvocation.PSCommandPath)"
+Write-Host " * Function: $(MyInvocationPSCommandPath)"
+Write-Host ""
+#>
 
 Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force;
 #. { Invoke-Webrequest -useb https://boxstarter.org/bootstrapper.ps1 } | Invoke-Expression; Get-Boxstarter -Force

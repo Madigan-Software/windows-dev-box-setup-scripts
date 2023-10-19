@@ -2,6 +2,7 @@
 # Author: Microsoft
 # chocolatey fest demo
 
+Disable-MicrosoftUpdate
 Disable-UAC
 $ConfirmPreference = "None" #ensure installing powershell modules don't prompt on needed dependencies
 
