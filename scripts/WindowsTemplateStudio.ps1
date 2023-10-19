@@ -11,14 +11,14 @@ $results = Invoke-WebRequest -Uri $requestUri -Method POST -Headers $requestHead
 
 $jsonResults = $results.Content | ConvertFrom-Json;
 $wtsResults = $jsonResults.results[0].extensions | where {$_.extensionName -eq "WindowsTemplateStudio"} ;
-$wtsFileUrl = $wtsResults.versions[0].files | where {$_.assetType -eq "Microsoft.Templates.2017.vsix"};
+$wtsFileUrl = $wtsResults.versions[0].files | where {$_.assetType -eq "Microsoft.Templates.2022.vsix"};
 
 $wtsVsix = [System.IO.Path]::GetFileName($wtsFileUrl.source);
 $wtsFullPath = [System.IO.Path]::Combine((Resolve-Path $env:USERPROFILE).path, $wtsVsix);
 
 Invoke-WebRequest -Uri $wtsFileUrl.source -OutFile $wtsFullPath;
 
-$vsixInstallerFile = Get-Childitem -Include vsixinstaller.exe -Recurse -Path "C:\Program Files (x86)\Microsoft Visual Studio\2017\";
+$vsixInstallerFile = Get-Childitem -Include vsixinstaller.exe -Recurse -Path "C:\Program Files\Microsoft Visual Studio\2022\";
 $wtsArgList = "/quiet `"$wtsFullPath`"";
 
 $vsixInstallerResult = Start-Process -FilePath $vsixInstallerFile.FullName -ArgumentList $wtsArgList -Wait -PassThru;
