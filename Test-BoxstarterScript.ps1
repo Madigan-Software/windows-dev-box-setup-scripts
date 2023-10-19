@@ -61,6 +61,7 @@ Write-Host " * Function: $(MyInvocationPSCommandPath)"
 Write-Host ""
 #>
 
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force;
+C:\ProgramData\Boxstarter\BoxstarterShell.ps1
+#Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force;
 #. { Invoke-Webrequest -useb https://boxstarter.org/bootstrapper.ps1 } | Invoke-Expression; Get-Boxstarter -Force
-Install-BoxstarterPackage -PackageName $script -DisableReboots
+Install-BoxstarterPackage -PackageName $ScriptPath -DisableReboots 

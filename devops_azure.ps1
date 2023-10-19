@@ -48,8 +48,13 @@ try {
     write-host "Installing tools inside the WSL distro..."
     Ubuntu1804 run apt install ansible -y        
 } catch {
-    Write-ChocolateyFailure $($MyInvocation.MyCommand.Name) $($_.Exception.ToString())
-    throw
+    # Write-ChocolateyFailure $($MyInvocation.MyCommand.Name) $($_.Exception.ToString())
+    $formatstring = "{0} : {1}`n{2}`n" +
+                    "    + CategoryInfo          : {3}`n" +
+                    "    + FullyQualifiedErrorId : {4}`n"
+    $fields = $_.InvocationInfo.MyCommand.Name,$_.ErrorDetails.Message,$_.InvocationInfo.PositionMessage,$_.CategoryInfo.ToString(), $_.FullyQualifiedErrorId
+    Write-Host -Object ($formatstring -f $fields) -ForegroundColor Red -BackgroundColor Black
+    throw $_.Exception
 } finally {
     #--- reenabling critial items ---
     Enable-UAC
