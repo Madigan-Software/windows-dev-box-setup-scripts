@@ -41,6 +41,7 @@ try {
                 Stop-Service -PassThru -Force
         }
         Get-Service -DisplayName 'Background Intelligent Transfer Service','Windows Update','Windows Update medic service','Delivery Optimization' -ErrorAction SilentlyContinue|Where-Object { $_.StartType -ne 'Deiabled' -and $_.Status -ne 'Running' }|Start-Service -PassThru
+        #$availableWindowsFeatures=$(choco list --source windowsfeatures|Where-Object { $_ -match '(En|Dis)abled'}|ForEach-Object { [PSCustomObject]@{ State=$(($_ -split '\|'|Select-Object -Last 1) -as [string]).Trim();Name=$(($_ -split '\|'|Select-Object -First 1) -as [string]).Trim(); } })
 
         $features=@()
 

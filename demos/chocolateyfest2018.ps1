@@ -8,14 +8,27 @@ $ConfirmPreference = "None" #ensure installing powershell modules don't prompt o
 
 # Get the base URI path from the ScriptToCall value
 $bstrappackage = "-bootstrapPackage"
-$helperUri = $Boxstarter['ScriptToCall']
-$strpos = $helperUri.IndexOf($bstrappackage)
-$helperUri = $helperUri.Substring($strpos + $bstrappackage.Length)
-$helperUri = $helperUri.TrimStart("'", " ")
-$helperUri = $helperUri.TrimEnd("'", " ")
-$strpos = $helperUri.LastIndexOf("/demos/")
-$helperUri = $helperUri.Substring(0, $strpos)
-$helperUri += "/scripts"
+if (![string]::IsNullOrEmpty($Boxstarter['ScriptToCall'])) {
+    $helperUri = $Boxstarter['ScriptToCall']
+    $strpos = $helperUri.IndexOf($bstrappackage)
+    $helperUri = $helperUri.Substring($strpos + $bstrappackage.Length)
+    $helperUri = $helperUri.TrimStart("'", " ")
+    $helperUri = $helperUri.TrimEnd("'", " ")
+
+    _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
+    [void]([System.Uri]::TryCreate($helperUri, [System.UriKind]::RelativeOrAbsolute, [ref]$helperUri));
+    _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
+    $helperUri
+    $helperUri.AbsolutePath
+
+    #$helperUri.Scheme -match '^file'; 
+    $helperUri = $helperUri.AbsolutePath
+        $helperUri = $helperUri.Substring(0, $helperUri.LastIndexOf("/"))
+    $helperUri += "/scripts"
+} else {
+    $helperUri = (Join-Path -Path $PSScriptRoot -ChildPath 'scripts')
+}
+$helperUri = $helperUri -replace '(\\|/)$',''
 write-host "helper script base URI is $helperUri"
 
 function executeScript {

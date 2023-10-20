@@ -23,7 +23,7 @@ function _logMessage {
         "$(if ($useBoxstarterMessage) { 'color' } else { 'ForegroundColor' })"=$ForegroundColor;
     }
 
-    if ($useBoxstarterMessage) { Write-BoxstarterMessage @$commandParams } else { Write-Host @$commandParams }
+    if ($useBoxstarterMessage) { Write-BoxstarterMessage @commandParams } else { Write-Host @commandParams }
 }
 
 $RefreshEnvironment={
@@ -41,23 +41,41 @@ $RefreshEnvironment={
     #&$LogSeperator
 }
 
+$_message = "*** [$($MyInvocation.MyCommand.Name)] Setting up developer workstation - Start ***"
 try {
-    _logMessage -Message "*** Trace Start - Setting up developer workstation ***"
+    _logMessage -Message $_message
 
     Disable-MicrosoftUpdate
     Disable-UAC
 
     # Get the base URI path from the ScriptToCall value
+    <#$Boxstarter['ScriptToCall']=@"
+Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter.Chocolatey\Boxstarter.Chocolatey.psd1) -global -DisableNameChecking; Invoke-ChocolateyBoxstarter -bootstrapPackage 'C:\data\tfs\git\Sandbox\windows-dev-box-setup-scripts\WORK_DeveloperMachineInstall.ps1' -DisableReboots -StopOnPackageFailure
+"@#>
     $bstrappackage = "-bootstrapPackage"
     $helperUri = $Boxstarter['ScriptToCall']
     _logMessage -Message "helper boxstarter.ScriptToCall is $($Boxstarter['ScriptToCall'])" -ForegroundColor Gray
 
-    $strpos = $helperUri.IndexOf($bstrappackage)
-    $helperUri = $helperUri.Substring($strpos + $bstrappackage.Length)
-    $helperUri = $helperUri.TrimStart("'", " ")
-    $helperUri = $helperUri.TrimEnd("'", " ")
-    $helperUri = $helperUri.Substring(0, $helperUri.LastIndexOf("/"))
-    $helperUri += ""
+    if (![string]::IsNullOrEmpty($Boxstarter['ScriptToCall'])) {
+        $strpos = $helperUri.IndexOf($bstrappackage)
+        $helperUri = $helperUri.Substring($strpos + $bstrappackage.Length)
+        $helperUri = $helperUri.TrimStart("'", " ")
+        $helperUri = $helperUri.TrimEnd("'", " ")
+
+        _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
+        [void]([System.Uri]::TryCreate($helperUri, [System.UriKind]::RelativeOrAbsolute, [ref]$helperUri));
+        _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
+        $helperUri
+        $helperUri.AbsolutePath
+
+        #$helperUri.Scheme -match '^file'; 
+        $helperUri = $helperUri.AbsolutePath
+        $helperUri = $helperUri.Substring(0, $helperUri.LastIndexOf("/"))
+        $helperUri += ""
+    } else {
+        $helperUri = (Join-Path -Path $PSScriptRoot -ChildPath '')
+    }
+    $helperUri = $helperUri -replace '(\\|/)$',''
     _logMessage -Message "helper script base URI is $helperUri" -ForegroundColor Gray
     
     function executeScript {
@@ -73,8 +91,13 @@ try {
     }
     
     #--- Setting up Windows OS ---
-    executeScript "/scripts/WinGetInstaller.ps1"
-    executeScript "/scripts/WindowsOptionalFeatures.ps1"
+    #executeScript "scripts/WinGetInstaller.ps1"
+    executeScript "scripts/WindowsOptionalFeatures.ps1"
+    if (Test-PendingReboot) { Invoke-Reboot }
+
+    #--- Setting up SQL Server ---
+    executeScript "scripts/SQLServerInstaller.ps1"
+    if (Test-PendingReboot) { Invoke-Reboot }
 
     #--- Setting up base DevEnvironment ---
     _logMessage -Message "*** Creating common folder structure ***"
@@ -90,11 +113,7 @@ try {
         [void](New-Item -Path "$($rootPath)$($_)" -Type Directory -Force -ErrorAction SilentlyContinue)
     }
     executeScript "dev_app.ps1";
-
-    #--- Setting up SQL Server ---
-    executeScript "/scripts/SQLServerInstaller.ps1"
-
-    _logMessage -Message "*** Setting up developer workstation - End ***"
+    if (Test-PendingReboot) { Invoke-Reboot }
 } catch {
     # Write-ChocolateyFailure $($MyInvocation.MyCommand.Name) $($_.Exception.ToString())
     $formatstring = "{0} : {1}`n{2}`n" +
@@ -107,4 +126,7 @@ try {
     #--- reenabling critial items ---
     Enable-UAC
     Enable-MicrosoftUpdate
+
+    $_message=$_message.Replace("- Start ","- End ")
+    _logMessage -Message $_message -ForegroundColor Cyan
 }

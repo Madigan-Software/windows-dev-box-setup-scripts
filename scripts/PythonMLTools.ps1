@@ -1,4 +1,5 @@
 # Install python
+#choco install -y python
 choco install -y python --version=3.5.4
 
 # Refresh path

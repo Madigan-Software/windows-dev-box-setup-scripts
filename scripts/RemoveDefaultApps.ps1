@@ -11,8 +11,8 @@ Write-Host "Uninstall some applications that come with Windows out of the box" -
 function removeApp {
 	Param ([string]$appName)
 	Write-Output "Trying to remove $appName"
-	Get-AppxPackage $appName -AllUsers | Remove-AppxPackage
-	Get-AppXProvisionedPackage -Online | Where DisplayName -like $appName | Remove-AppxProvisionedPackage -Online
+	Get-AppxPackage $appName -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
+	Get-AppXProvisionedPackage -Online | Where-Object DisplayName -like $appName | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
 }
 
 $applicationList = @(
