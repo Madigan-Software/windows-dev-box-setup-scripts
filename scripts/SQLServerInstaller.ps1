@@ -1,13 +1,25 @@
 [CmdletBinding()]
 param(
-    [Parameter()][ValidateSet('2019')][string]$Version='2022'
+    [Parameter()][ValidateSet('2019','2022')][string]$Version='2022'
    ,[Parameter()][ValidateSet('dev')][string]$Sku='dev'
 )
+[ValidateSet("sql-server")][string]$ProductName="sql-server"
+[ValidateSet("sql-server-2019","sql-server-2022")][string]$PackageId="sql-server-$($Version)"
 
 $_message = "*** [$($MyInvocation.MyCommand.Name)] Installing SQL Server $($Sku) $($Version) - Start ***"
 
 try {
     _logMessage -Message $_message -ForegroundColor Cyan
+
+    $packageList=$(choco list "$($PackageId)" -y --accept-licence --limit-output --force)|Where-Object { $_ -match ("$($PackageId)") }|ForEach-Object { [PSCustomObject]@{ Version=$($_ -split '\|'|Select-Object -Last 1) -as [System.Version];Id=$($_ -split '\|'|Select-Object -First 1) -as [string]; } }
+    if ($null -eq $packageList) { $packageList = [PSCustomObject]@{ Version = -1 -as [System.Version];Id=$PackageId; } }
+    $onLinePackageList=choco search "$($PackageId)" --yes --limit-output --exact|Where-Object { $_ -match ("$($PackageId)") }|ForEach-Object { [PSCustomObject]@{ Version=$($_ -split '\|'|Select-Object -Last 1) -as [System.Version];Id=$($_ -split '\|'|Select-Object -First 1) -as [string]; } }
+    if ($null -eq $onLinePackageList) { $onLinePackageList = [PSCustomObject]@{ Version = -1 -as [System.Version];Id=$PackageId; } }
+    $result=Compare-Object -ReferenceObject $packageList -DifferenceObject $onLinePackageList -Property Id,Version -PassThru|Select-Object -Property * -ErrorAction SilentlyContinue
+    if (!($result -and $($result.SideIndicator|Where-Object { $_ -match '^(\=\>|\<\=)$' }))) {
+        _logMessage -Message "$($PackageId): $(if ($null -ne $onLinePackageList.Version) { "Already installed" } else { "Does not exist please check chocolatey https://community.chocolatey.org/packages?q=id%3A$($PackageId)" })" -ForegroundColor Yellow
+        return
+    }
 
     $sqlSAPwd=if (([Environment]::GetEnvironmentVariable("choco:sqlserver$($Version):SAPWD"))) { ([Environment]::GetEnvironmentVariable("choco:sqlserver$($Version):SAPWD","User")) } else { ([Net.NetworkCredential]::new('', (Read-Host -Prompt 'Enter SQL Servwr SA password' -AsSecureString)).Password) }
     @('User','Process')|ForEach-Object {
@@ -51,12 +63,12 @@ try {
 
     $commandArgs += '/SQLUSERDBDIR="C:\data\sql\Data"'
     $commandArgs += '/SQLUSERDBLOGDIR="C:\data\sql\Log"'
-
-    choco install "sql-server-$($Version)" $chocoDefaultArgs --package-parameters ('"{0}"' -f ($commandArgs -join ' '))
+    
+    choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f ($commandArgs -join ' '))
 
     Get-Service -Name sql* -ErrorAction SilentlyContinue|Start-Service -PassThru
 
-    if ((Get-Command -CommandType Function -Name executeChocolateyInstall* -ErrorAction SilentlyContinue)) { executeChocolateyInstall -Package 'sql-server-management-studio' } 
+    choco install -y "$($ProductName)-management-studio" --exact --accept-licence
 
     _logMessage -Message @'
 [TODO]:    Set SQL Server full text mode to rebuild'
