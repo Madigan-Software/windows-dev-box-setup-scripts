@@ -2,6 +2,21 @@
 # Author: Microsoft
 # Common settings for web dev
 
+function Invoke-ExternalCommand([scriptblock]$Command) {
+    $Command | Out-String | Write-Verbose
+    & $Command
+
+    # Need to check both of these cases for errors as they represent different items
+    # - $?: did the powershell script block throw an error
+    # - $lastexitcode: did a windows command executed by the script block end in error
+    if ((-not $?) -or ($lastexitcode -ne 0)) {
+        if ($error -ne $null) {
+            Write-Warning $error[0]
+        }
+        throw "Command failed to execute: $Command"
+    }
+}
+
 try {
     Disable-MicrosoftUpdate
     Disable-UAC

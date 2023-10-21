@@ -1,4 +1,4 @@
 Enable-WindowsOptionalFeature -Online -FeatureName containers -All
 RefreshEnv
-choco install -y docker-for-windows
-choco install -y vscode-docker
+Invoke-ExternalCommand -Command { choco install -y docker-for-windows }
+Invoke-ExternalCommand -Command { choco install -y vscode-docker }

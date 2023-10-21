@@ -1,5 +1,7 @@
-Update-SessionEnvironment
-cd $env:USERPROFILE\desktop
-mkdir UwpSamples
-cd UwpSamples
-git clone https://github.com/Microsoft/Windows-universal-samples/
+Invoke-ExternalCommand -Command { 
+    Update-SessionEnvironment
+    Set-Location $env:USERPROFILE\desktop
+    mkdir UwpSamples
+    Set-Location UwpSamples
+    git clone https://github.com/Microsoft/Windows-universal-samples/
+}

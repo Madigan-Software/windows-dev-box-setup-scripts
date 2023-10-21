@@ -77,6 +77,7 @@ try {
 
     $commandArgs += '/SQLUSERDBDIR="C:\data\sql\Data"'
     $commandArgs += '/SQLUSERDBLOGDIR="C:\data\sql\Log"'
+    
     $commandArgs += '/IGNOREPENDINGREBOOT'
     
     _logMessage -Message @"
@@ -86,11 +87,13 @@ try {
 ========================================================================================================================
 "@ -ForegroundColor Magenta
     if (!(_IsMsSQLServerInstalled '.')) {
-        $packageParameters = $("'{0}'" -f $($commandArgs -join ' '))
-        _logMessage -Message "PP: $($packageParameters)" -ForegroundColor DarkMagenta
+        Invoke-ExternalCommand -Command { 
+            $packageParameters = $("'{0}'" -f $($commandArgs -join ' '))
+            _logMessage -Message "PP: $($packageParameters)" -ForegroundColor DarkMagenta
 
-        choco install -y "$($PackageId)" --exact --accept-licence --package-parameters $packageParameters
-        _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
+            choco install -y "$($PackageId)" --exact --accept-licence --package-parameters $packageParameters 
+            _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
+        }
     }
 
     _logMessage -Message "Starting SQL Server services" -ForegroundColor Gray
@@ -102,7 +105,7 @@ try {
 *                  I n s t a l l i n g   S Q L   S e r v e r   -   M a n a g e m e n t   S t u d i o                  *
 ========================================================================================================================
 "@ -ForegroundColor Magenta
-    choco install -y "$($ProductName)-management-studio" --exact --accept-licence
+    Invoke-ExternalCommand -Command { choco install -y "$($ProductName)-management-studio" --exact --accept-licence }
 
     _logMessage -Message @'
 [TODO]:    Set SQL Server full text mode to rebuild'

@@ -1,3 +1,3 @@
 #--- Browsers ---
-#choco install -y googlechrome
-#choco install -y firefox
+#Invoke-ExternalCommand -Command { choco install -y googlechrome }
+#Invoke-ExternalCommand -Command { choco install -y firefox }

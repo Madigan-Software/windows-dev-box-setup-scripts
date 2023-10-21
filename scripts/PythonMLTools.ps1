@@ -1,20 +1,20 @@
 # Install python
 #choco install -y python
-choco install -y python --version=3.5.4
+Invoke-ExternalCommand -Command { choco install -y python --version=3.5.4 }
 
 # Refresh path
 refreshenv
 
 # Update pip
-python -m pip install --upgrade pip
+Invoke-ExternalCommand -Command { python -m pip install --upgrade pip }
 
 # Install ML related python packages through pip
-pip install numpy
-pip install scipy
-pip install pandas
-pip install matplotlib
-pip install tensorflow
-pip install keras
+Invoke-ExternalCommand -Command { pip install numpy }
+Invoke-ExternalCommand -Command { pip install scipy }
+Invoke-ExternalCommand -Command { pip install pandas }
+Invoke-ExternalCommand -Command { pip install matplotlib }
+Invoke-ExternalCommand -Command { pip install tensorflow }
+Invoke-ExternalCommand -Command { pip install keras }
 
 # Get Visual Studio C++ Redistributables
-choco install -y vcredist2015
+Invoke-ExternalCommand -Command { choco install -y vcredist2015 }
