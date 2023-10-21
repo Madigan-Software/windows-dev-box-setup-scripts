@@ -55,7 +55,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
 "@#>
     $bstrappackage = "-bootstrapPackage"
     $helperUri = $Boxstarter['ScriptToCall']
-    _logMessage -Message "helper boxstarter.ScriptToCall is $($Boxstarter['ScriptToCall'])" -ForegroundColor Gray
+    _logMessage -Message "*** [001] - helper boxstarter.ScriptToCall is $($Boxstarter['ScriptToCall'])" -ForegroundColor Gray
 
     if (![string]::IsNullOrEmpty($Boxstarter['ScriptToCall'])) {
         $strpos = $helperUri.IndexOf($bstrappackage)
@@ -63,11 +63,11 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
         $helperUri = $helperUri.TrimStart("'", " ")
         $helperUri = $helperUri.TrimEnd("'", " ")
 
-        _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
+        _logMessage -Message "*** [002] - uri is $($helperUri|Out-String)" -ForegroundColor Gray
         [void]([System.Uri]::TryCreate($helperUri, [System.UriKind]::RelativeOrAbsolute, [ref]$helperUri));
-        _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
-        $helperUri
-        $helperUri.AbsolutePath
+        _logMessage -Message "*** [003] - uri is $($helperUri|Out-String)" -ForegroundColor Gray
+        _logMessage -Message "*** [004] - $($helperUri|Out-String)" -ForegroundColor Gray
+        _logMessage -Message "*** [005] - $($helperUri.AbsolutePath)" ForeGroundColor Magenta
 
         #$helperUri.Scheme -match '^file'; 
         $helperUri = $helperUri.AbsolutePath
@@ -77,7 +77,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
         $helperUri = (Join-Path -Path $PSScriptRoot -ChildPath '')
     }
     $helperUri = $helperUri -replace '(\\|/)$',''
-    _logMessage -Message "helper script base URI is $helperUri" -ForegroundColor Gray
+    _logMessage -Message "*** [006] - helper script base URI is $($helperUri)" -ForegroundColor Gray
     
     function executeScript {
         Param ([string]$script)
@@ -92,16 +92,13 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     }
     
     #--- Setting up Windows OS ---
+    _logMessage -Message "*** [007] - Setting up Windows OS" -ForegroundColor Gray
     #executeScript "scripts/WinGetInstaller.ps1"
     #executeScript "scripts/WindowsOptionalFeatures.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
 
-    #--- Setting up SQL Server ---
-    executeScript "scripts/SQLServerInstaller.ps1"
-    if (Test-PendingReboot) { Invoke-Reboot }
-
-    #--- Setting up base DevEnvironment ---
-    _logMessage -Message "*** Creating common folder structure ***"
+    #--- Setting up Common Folders ---
+    _logMessage -Message "*** [008] - Creating common folder structure" -ForegroundColor Gray
     $rootPath="C:\data\"
     @(
         "\sql\Backup\"
@@ -113,6 +110,14 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     ) | Foreach-Object {
         [void](New-Item -Path "$($rootPath)$($_)" -Type Directory -Force -ErrorAction SilentlyContinue)
     }
+    
+    #--- Setting up SQL Server ---
+    _logMessage -Message "*** [009] - Setting up SQL Server" -ForegroundColor Gray
+    executeScript "scripts/SQLServerInstaller.ps1"
+    if (Test-PendingReboot) { Invoke-Reboot }
+
+    #--- Setting up base DevEnvironment ---
+    _logMessage -Message "*** [010] - Developer Tools" -ForegroundColor Gray
     #executeScript "dev_app.ps1";
     if (Test-PendingReboot) { Invoke-Reboot }
 } catch {
