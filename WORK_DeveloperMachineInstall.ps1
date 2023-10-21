@@ -69,7 +69,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
         _logMessage -Message "*** [004] - $($helperUri.AbsolutePath)" -ForeGroundColor Magenta
 
         #$helperUri.Scheme -match '^file'; 
-        $helperUri = $helperUri.AbsolutePath
+        $helperUri = $helperUri.AbsoluteUri
         $helperUri = $helperUri.Substring(0, $helperUri.LastIndexOf("/"))
         $helperUri += ""
     } else {
