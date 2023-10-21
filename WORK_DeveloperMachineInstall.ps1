@@ -92,7 +92,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     
     #--- Setting up Windows OS ---
     #executeScript "scripts/WinGetInstaller.ps1"
-    executeScript "scripts/WindowsOptionalFeatures.ps1"
+    #executeScript "scripts/WindowsOptionalFeatures.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
 
     #--- Setting up SQL Server ---
@@ -112,7 +112,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     ) | Foreach-Object {
         [void](New-Item -Path "$($rootPath)$($_)" -Type Directory -Force -ErrorAction SilentlyContinue)
     }
-    executeScript "dev_app.ps1";
+    #executeScript "dev_app.ps1";
     if (Test-PendingReboot) { Invoke-Reboot }
 } catch {
     # Write-ChocolateyFailure $($MyInvocation.MyCommand.Name) $($_.Exception.ToString())

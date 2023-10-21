@@ -16,11 +16,11 @@ try {
     $onLinePackageList=$(choco search "$($PackageId)" --yes --limit-output --exact|Where-Object { $_ -match ("$($PackageId)") }|ForEach-Object { [PSCustomObject]@{ Version=$($_ -split '\|'|Select-Object -Last 1) -as [System.Version];Id=$($_ -split '\|'|Select-Object -First 1) -as [string]; } })
     if ($null -eq $onLinePackageList) { $onLinePackageList = [PSCustomObject]@{ Version = -1 -as [System.Version];Id=$PackageId; } }
     $result=$(Compare-Object -ReferenceObject $packageList -DifferenceObject $onLinePackageList -Property Id,Version -PassThru|Select-Object -Property * -ErrorAction SilentlyContinue|Where-Object { $_.SideIndicator -match '^(\=\>)$' })
-    #$result
-    if (!($result -and $($result.SideIndicator|Where-Object { $_.SideIndicator -match '^(\=\>|\<\=)$' }))) {
-        _logMessage -Message "$($PackageId): $(if ($null -ne $onLinePackageList.Version) { "Already installed" } else { "Does not exist please check chocolatey https://community.chocolatey.org/packages?q=id%3A$($PackageId)" })" -ForegroundColor Yellow
-        return
-    }
+    $result
+    # if (!($result -and $($result.SideIndicator|Where-Object { $_.SideIndicator -match '^(\=\>|\<\=)$' }))) {
+    #     _logMessage -Message "$($PackageId): $(if ($null -ne $onLinePackageList.Version) { "Already installed" } else { "Does not exist please check chocolatey https://community.chocolatey.org/packages?q=id%3A$($PackageId)" })" -ForegroundColor Yellow
+    #     return
+    # }
 
     $sqlSAPwd=if (([Environment]::GetEnvironmentVariable("choco:sqlserver$($Version):SAPWD"))) { ([Environment]::GetEnvironmentVariable("choco:sqlserver$($Version):SAPWD","User")) } else { ([Net.NetworkCredential]::new('', (Read-Host -Prompt 'Enter SQL Servwr SA password' -AsSecureString)).Password) }
     @('User','Process')|ForEach-Object {
@@ -70,7 +70,7 @@ try {
 *                                      I n s t a l l i n g   S Q L   S e r v e r                                      *
 ========================================================================================================================
 "@ -ForegroundColor Magenta
-    choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f ($commandArgs -join ' '))
+    choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' '))
     $?
     $LASTEXITCODE
 
