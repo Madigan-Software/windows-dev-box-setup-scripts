@@ -85,7 +85,7 @@ try {
 ========================================================================================================================
 "@ -ForegroundColor Magenta
     if (!(_IsMsSQLServerInstalled '.')) {
-        choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters $("'{0}'" -f $($commandArgs -join ' '))
+        choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters $("'{0}'" -f $($commandArgs -join ' ')) --ignoredetectedreboot
         _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
     }
 
