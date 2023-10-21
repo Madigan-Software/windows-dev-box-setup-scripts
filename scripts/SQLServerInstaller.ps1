@@ -77,6 +77,7 @@ try {
 
     $commandArgs += '/SQLUSERDBDIR="C:\data\sql\Data"'
     $commandArgs += '/SQLUSERDBLOGDIR="C:\data\sql\Log"'
+    $commandArgs += '/IGNOREPENDINGREBOOT'
     
     _logMessage -Message @"
 
@@ -88,7 +89,7 @@ try {
         $packageParameters = $("'{0}'" -f $($commandArgs -join ' '))
         _logMessage -Message "PP: $($packageParameters)" -ForegroundColor DarkMagenta
 
-        choco install -y "$($PackageId)" --exact --accept-licence --package-parameters $packageParameters --ignoredetectedreboot
+        choco install -y "$($PackageId)" --exact --accept-licence --package-parameters $packageParameters
         _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
     }
 
