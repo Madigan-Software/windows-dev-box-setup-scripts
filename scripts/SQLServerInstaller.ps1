@@ -6,6 +6,19 @@ param(
 [ValidateSet("sql-server")][string]$ProductName="sql-server"
 [ValidateSet("sql-server-2019","sql-server-2022")][string]$PackageId="$($ProductName)-$($Version)"
 
+function _IsMsSQLServerInstalled($serverInstance) {
+    If(Test-Path 'HKLM:\Software\Microsoft\Microsoft SQL Server\Instance Names\SQL') { return $true }
+    try {
+        $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverInstance
+        $ver = $server.Version.Major
+        Write-Host " MsSQL Server version detected :" $ver
+        return ($ver -ne $null)
+    }
+    Catch {return $false}
+    
+    return $false
+}
+
 $_message = "*** [$($MyInvocation.MyCommand.Name)] Installing SQL Server $($Sku) $($Version) - Start ***"
 
 try {
@@ -71,9 +84,11 @@ try {
 *                                      I n s t a l l i n g   S Q L   S e r v e r                                      *
 ========================================================================================================================
 "@ -ForegroundColor Magenta
-    _logMessage -Message "choco install -y $("$PackageId" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' ')))" -ForegroundColor Gray
-    #choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' '))
-    _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray
+    if (!(_IsMsSQLServerInstalled '.')) {
+        _logMessage -Message "choco install -y $("$PackageId" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' ')))" -ForegroundColor Gray
+        #choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' '))
+        _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
+    }
 
     _logMessage -Message "Starting SQL Server services" -ForegroundColor Gray
     Get-Service -Name sql* -ErrorAction SilentlyContinue|Start-Service -PassThru
