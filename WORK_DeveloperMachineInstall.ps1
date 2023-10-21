@@ -67,7 +67,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
         [void]([System.Uri]::TryCreate($helperUri, [System.UriKind]::RelativeOrAbsolute, [ref]$helperUri));
         _logMessage -Message "*** [003] - uri is $($helperUri|Out-String)" -ForegroundColor Gray
         _logMessage -Message "*** [004] - $($helperUri|Out-String)" -ForegroundColor Gray
-        _logMessage -Message "*** [005] - $($helperUri.AbsolutePath)" ForeGroundColor Magenta
+        _logMessage -Message "*** [005] - $($helperUri.AbsolutePath)" -ForeGroundColor Magenta
 
         #$helperUri.Scheme -match '^file'; 
         $helperUri = $helperUri.AbsolutePath
