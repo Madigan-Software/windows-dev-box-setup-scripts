@@ -24,6 +24,7 @@ function _logMessage {
     }
 
     if ($useBoxstarterMessage) { Write-BoxstarterMessage @commandParams } else { Write-Host @commandParams }
+    if ($useBoxstarterMessage) { Write-BoxstarterMessage @commandParams } else { Write-Host @commandParams }
 }
 
 $RefreshEnvironment={
