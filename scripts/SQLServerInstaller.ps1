@@ -71,7 +71,7 @@ try {
 *                                      I n s t a l l i n g   S Q L   S e r v e r                                      *
 ========================================================================================================================
 "@ -ForegroundColor Magenta
-    _logMessage -Message "$(choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' ')))" -ForegroundColor Gray
+    _logMessage -Message "choco install -y $("$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' ')))" -ForegroundColor Gray
     choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' '))
     _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray
 
