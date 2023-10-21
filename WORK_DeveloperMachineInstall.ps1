@@ -45,6 +45,10 @@ $RefreshEnvironment={
 $_message = "*** [$($MyInvocation.MyCommand.Name)] Setting up developer workstation - Start ***"
 try {
     _logMessage -Message $_message
+    if (((choco --version) -as [System.Version]) -lt [System.Version]("2.2.2")) { 
+        _logMessage -Message "Chocolatey v$(choco --version) <= v2.2.2"
+        choco upgrade chocolatey 
+    }
 
     Disable-MicrosoftUpdate
     Disable-UAC
