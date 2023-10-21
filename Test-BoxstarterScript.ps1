@@ -66,6 +66,6 @@ Write-Host ""
 $Boxstarter.RebootOk=$true
 #Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force;
 #. { Invoke-Webrequest -useb https://boxstarter.org/bootstrapper.ps1 } | Invoke-Expression; Get-Boxstarter -Force
-# Start-Process http://boxstarter.org/package/url?https://raw.githubusercontent.com/MadiganSoftware/windows-dev-box-setup-scripts/FRFL/WORK_DeveloperMachineInstall.ps1
+# Start-Process http://boxstarter.org/package/url?https://raw.githubusercontent.com/Madigan-Software/windows-dev-box-setup-scripts/FRFL/WORK_DeveloperMachineInstall.ps1
 [void]($result=Install-BoxstarterPackage -PackageName $ScriptPath -KeepWindowOpen -StopOnPackageFailure)
 #"Result: $($result|Out-String)" 
