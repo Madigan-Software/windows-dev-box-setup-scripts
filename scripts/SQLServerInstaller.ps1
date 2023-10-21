@@ -66,17 +66,20 @@ try {
     $commandArgs += '/SQLUSERDBLOGDIR="C:\data\sql\Log"'
     
     _logMessage -Message @"
+
 ========================================================================================================================
 *                                      I n s t a l l i n g   S Q L   S e r v e r                                      *
 ========================================================================================================================
 "@ -ForegroundColor Magenta
+    _logMessage -Message "$(choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' ')))" -ForegroundColor Gray
     choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' '))
-    $?
-    $LASTEXITCODE
+    _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray
 
+    _logMessage -Message "Starting SQL Server services" -ForegroundColor Gray
     Get-Service -Name sql* -ErrorAction SilentlyContinue|Start-Service -PassThru
 
     _logMessage -Message @"
+
 ========================================================================================================================
 *                  I n s t a l l i n g   S Q L   S e r v e r   -   M a n a g e m e n t   S t u d i o                  *
 ========================================================================================================================
