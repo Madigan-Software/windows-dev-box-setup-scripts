@@ -80,7 +80,7 @@ try {
             if ($oldWuausrvStatus -ne ((Get-Service -Name wuauserv).Status)) { Get-Service -Name wuauserv|Start-Service -PassThru }
 
             Set-ItemProperty -Path $DoSvcPath -Name Start -Type DWord -Value $oldStart -Force
-            if ($oldWuausrvStatus -ne ((Get-Service -DisplayName 'Delivery Optimization').Status)) { Get-Service -DisplayName 'Delivery Optimization'| Start-Service -PassThru }
+            if ($oldDoSvcStatus -ne ((Get-Service -DisplayName 'Delivery Optimization').Status)) { Get-Service -DisplayName 'Delivery Optimization'| Start-Service -PassThru }
         }
         
         #endregion features 

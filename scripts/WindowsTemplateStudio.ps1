@@ -11,8 +11,8 @@ Invoke-ExternalCommand -Command {
     $results = Invoke-WebRequest -Uri $requestUri -Method POST -Headers $requestHeaders -Body $requestBody -UseBasicParsing;
 
     $jsonResults = $results.Content | ConvertFrom-Json;
-    $wtsResults = $jsonResults.results[0].extensions | where {$_.extensionName -eq "WindowsTemplateStudio"} ;
-    $wtsFileUrl = $wtsResults.versions[0].files | where {$_.assetType -eq "Microsoft.Templates.2022.vsix"};
+    $wtsResults = $jsonResults.results[0].extensions | Where-Object {$_.extensionName -eq "WindowsTemplateStudio"} ;
+    $wtsFileUrl = $wtsResults.versions[0].files | Where-Object {$_.assetType -eq "Microsoft.Templates.2022.vsix"};
 
     $wtsVsix = [System.IO.Path]::GetFileName($wtsFileUrl.source);
     $wtsFullPath = [System.IO.Path]::Combine((Resolve-Path $env:USERPROFILE).path, $wtsVsix);
