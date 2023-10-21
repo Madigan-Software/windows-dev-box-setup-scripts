@@ -81,11 +81,11 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     
     function executeScript {
         Param ([string]$script)
-        $scriptInvovcation = (Get-Variable -Name MyInvocation -Scope Script).Value
-        $scriptFullPath = $scriptInvovcation.MyCommand.Path # full path of script
-        $scriptPath = Split-Path -Path $scriptFullPath      # pwth of script
-        $scriptName = $scriptInvovcation.MyCommand.Name     #scriptName
-        $invocationPath = $scriptInvovcation.InvocationName # invocation relative to `$PWD
+        #$scriptInvovcation = (Get-Variable -Name MyInvocation -Scope Script).Value
+        #$scriptFullPath = $scriptInvovcation.MyCommand.Path # full path of script
+        #$scriptPath = Split-Path -Path $scriptFullPath      # pwth of script
+        #$scriptName = $scriptInvovcation.MyCommand.Name     #scriptName
+        #$invocationPath = $scriptInvovcation.InvocationName # invocation relative to `$PWD
 
         _logMessage -Message "executing $helperUri/$script ..."
         Invoke-Expression ((new-object net.webclient).DownloadString("$helperUri/$script"))

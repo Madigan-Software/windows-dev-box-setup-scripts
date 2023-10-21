@@ -12,7 +12,7 @@ function _IsMsSQLServerInstalled($serverInstance) {
         $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverInstance
         $ver = $server.Version.Major
         Write-Host " MsSQL Server version detected :" $ver
-        return ($ver -ne $null)
+        return ($null -ne $ver)
     }
     Catch {return $false}
     
@@ -85,8 +85,7 @@ try {
 ========================================================================================================================
 "@ -ForegroundColor Magenta
     if (!(_IsMsSQLServerInstalled '.')) {
-        _logMessage -Message "choco install -y $("$PackageId" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' ')))" -ForegroundColor Gray
-        #choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters ('"{0}"' -f $($commandArgs -join ' '))
+        choco install -y "$($PackageId)" --exact --accept-licence $chocoDefaultArgs --package-parameters $("'{0}'" -f $($commandArgs -join ' '))
         _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
     }
 
