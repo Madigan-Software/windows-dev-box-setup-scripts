@@ -61,6 +61,7 @@ Write-Host " * Function: $(MyInvocationPSCommandPath)"
 Write-Host ""
 #>
 
+Import-Module Boxstarter.Common
 #C:\ProgramData\Boxstarter\BoxstarterShell.ps1
 #$Boxstarter
 $Boxstarter.RebootOk=$true
