@@ -70,8 +70,8 @@ function _chocolatey-InstallOrUpdate {
             $chocoParameters += '--yes'
             $chocoParameters += '--accept-licence'
             $chocoParameters += '--force'
-            if ($null -ne $PackageParameters) { $chocoParameters += $('--package-parameters="{0}"' -f $PackageParameters) }
-            if ($null -ne $Source) { $chocoParameters += $('--source="{0}"' -f $Source) }
+            if (![string]::IsNullOrWhiteSpace($PackageParameters)) { $chocoParameters += $('--package-parameters="{0}"' -f $PackageParameters) }
+            if (![string]::IsNullOrWhiteSpace($Source)) { $chocoParameters += $('--source="{0}"' -f $Source) }
             choco @chocoParameters
             _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
         }
@@ -107,33 +107,25 @@ try {
     Disable-UAC
 
     Invoke-ExternalCommand -Command { 
-        choco feature disable --name="'allowEmptyChecksums'"                     # Allow packages to have empty/missing checksums for downloaded resources from non-secure locations (HTTP, FTP). Enabling is not recommended if using sources that download resources from the internet.
-        choco feature disable --name="'allowGlobalConfirmation'"                 # Prompt for confirmation in scripts or bypass.
-        choco feature disable --name="'disableCompatibilityChecks'"              # Disable Compatibility Checks - Should a warning we shown, before and after command execution, when a runtime compatibility check determines that there is an incompatibility between Chocolatey and Chocolatey Licensed Extension. Available in 1.1.0+
-        choco feature disable --name="'exitOnRebootDetected'"                    # Exit On Reboot Detected - Stop running install, upgrade, or uninstall when a reboot request is detected. Requires 'usePackageExitCodes' feature to be turned on. Will exit with either 350 or 1604. When it exits with 350, it means pending reboot discovered prior to running operation. When it exits with 1604, it means some work completed prior to reboot request being detected.
-        choco feature disable --name="'failOnAutoUninstaller'"                   # Fail if automatic uninstaller fails.
-        choco feature disable --name="'failOnInvalidOrMissingLicense'"           # Fail On Invalid Or Missing License - allows knowing when a license is expired or not applied to a machine.
-        choco feature disable --name="'failOnStandardError'"                     # Fail if install provider writes to stderr. Not recommended for use.
-        choco feature disable --name="'ignoreUnfoundPackagesOnUpgradeOutdated'"  # Ignore Unfound Packages On Upgrade Outdated - When checking outdated or upgrades, if a package is not found against sources specified, don't report the package at all.
-        choco feature disable --name="'logEnvironmentValues'"                    # Log Environment Values - will log values of environment before and after install (could disclose sensitive data).
-        choco feature disable --name="'logWithoutColor'"                         # Log without color - Do not show colorization in logging output.
-        choco feature disable --name="'removePackageInformationOnUninstall'"     # Remove Stored Package Information On Uninstall - When a package is uninstalled, should the stored package information also be removed?
-        choco feature disable --name="'skipPackageUpgradesWhenNotInstalled'"     # Skip Packages Not Installed During Upgrade - if a package is not installed, do not install it during the upgrade process.
-        choco feature disable --name="'stopOnFirstPackageFailure'"               # Stop On First Package Failure - Stop running install, upgrade or uninstall on first package failure instead of continuing with others. As this will affect upgrade all, it is normally recommended to leave this off.
-        choco feature disable --name="'useEnhancedExitCodes'"                    # Use Enhanced Exit Codes - Chocolatey is able to provide enhanced exit codes surrounding list, search, info, outdated and other commands that don't deal directly with package operations. To see enhanced exit codes and their meanings, please run `choco [cmdname] -?`. With this feature off, choco will exit with 0, 1, or -1  (matching previous behavior).
-        choco feature disable --name="'useFipsCompliantChecksums'"               # Use FIPS Compliant Checksums - Ensure checksumming done by choco uses FIPS compliant algorithms. Not recommended unless required by FIPS Mode. Enabling on an existing installation could have unintended consequences related to upgrades/uninstalls.
-        choco feature disable --name="'useRememberedArgumentsForUpgrades'"       # Use Remembered Arguments For Upgrades - When running upgrades, use arguments for upgrade that were used for installation ('remembered'). This is helpful when running upgrade for all packages. This is considered in preview and will be flipped to on by default in a future release.
-        choco feature disable --name="'virusCheck'"                              # Virus Check - perform virus checking on downloaded files. Licensed versions only.
-        choco feature enable  --name="'allowEmptyChecksumsSecure'"               # Allow packages to have empty/missing checksums for downloaded resources from secure locations (HTTPS).
-        choco feature enable  --name="'autoUninstaller'"                         # Uninstall from programs and features without requiring an explicit uninstall script.
-        choco feature enable  --name="'checksumFiles'"                           # Checksum files when pulled in from internet (based on package).
-        choco feature enable  --name="'ignoreInvalidOptionsSwitches'"            # Ignore Invalid Options/Switches - If a switch or option is passed that is not recognized, should choco fail?
-        choco feature enable  --name="'logValidationResultsOnWarnings'"          # Log validation results on warnings - Should the validation results be logged if there are warnings?
-        choco feature enable  --name="'powershellHost'"                          # Use Chocolatey's built-in PowerShell host.
-        choco feature enable  --name="'showDownloadProgress'"                    # Show Download Progress - Show download progress percentages in the CLI.
-        choco feature enable  --name="'showNonElevatedWarnings'"                 # Show Non-Elevated Warnings - Display non-elevated warnings.
-        choco feature enable  --name="'usePackageExitCodes'"                     # Use Package Exit Codes - Package scripts can provide exit codes. With this on, package exit codes will be what choco uses for exit when non-zero (this value can come from a dependency package). Chocolatey defines valid exit codes as 0, 1605, 1614, 1641, 3010. With this feature off, choco will exit with 0, 1, or -1 (matching previous behavior).
-        choco feature enable  --name="'usePackageRepositoryOptimizations'"       # Use Package Repository Optimizations - Turn on optimizations for reducing bandwidth with repository queries during package install/upgrade/outdated operations. Should generally be left enabled, unless a repository needs to support older methods of query. When disabled, this makes queries similar to the way they were done in earlier versions of Chocolatey.
+        [array]$featureList=$(choco feature --limit-output|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Skip 1 -First 1) -as [string] }; N='State'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [string] }; N='Description'; })
+        $_setFeatureState={
+            [CmdletBinding()]
+            param (
+                [Parameter()]$Feature
+               ,[Parameter()][ValidateSet('enable','disable')][string]$TargetState
+            )
+            if ($Feature.State -notmatch "^$($TargetState).*$") { 
+                choco feature $TargetState.ToString().ToLower() --name="'$($Feature.Id.ToString().Trim())'"
+            }
+        }
+        $enabledList = $featureList|Where-Object { $_.Id -match "^(allowEmptyChecksumsSecure|autoUninstaller|checksumFiles|ignoreInvalidOptionsSwitches|logValidationResultsOnWarnings|powershellHost|showDownloadProgress|showNonElevatedWarnings|usePackageExitCodes|usePackageRepositoryOptimizations)$" }
+        $disabledList = $featureList|Where-Object { $_.Id -notin $enabledList.Id}
+        $disabledList|Foreach-Object {
+            &$_setFeatureState -Feature $_ -TargetState 'disable'
+        }
+        $enabledList|Foreach-Object {
+            &$_setFeatureState -Feature $_ -TargetState 'enable'
+        }
     }
     # Get the base URI path from the ScriptToCall value
     <#$Boxstarter['ScriptToCall']=@"
