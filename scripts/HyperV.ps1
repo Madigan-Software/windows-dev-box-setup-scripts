@@ -1,1 +1,1 @@
-Invoke-ExternalCommand -Command { choco install -y Microsoft-Hyper-V-All --source="'windowsFeatures'" }
+_chocolatey-InstallOrUpdate -PackageId "Microsoft-Hyper-V-All" -Source "'windowsFeatures'"

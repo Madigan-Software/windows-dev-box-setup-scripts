@@ -1,5 +1,5 @@
 # Install python
-#choco install -y python
+# _chocolatey-InstallOrUpdate -PackageId python
 Invoke-ExternalCommand -Command { choco install -y python --version=3.5.4 }
 
 # Refresh path
@@ -17,4 +17,4 @@ Invoke-ExternalCommand -Command { pip install tensorflow }
 Invoke-ExternalCommand -Command { pip install keras }
 
 # Get Visual Studio C++ Redistributables
-Invoke-ExternalCommand -Command { choco install -y vcredist2015 }
+_chocolatey-InstallOrUpdate -PackageId vcredist2015

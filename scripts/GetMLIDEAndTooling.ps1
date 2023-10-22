@@ -1,3 +1,3 @@
 # Using vscode as a default IDE
-Invoke-ExternalCommand -Command { choco install -y vscode }
-Invoke-ExternalCommand -Command { choco install -y git --package-parameters="'/GitAndUnixToolsOnPath /WindowsTerminal'" }
+_chocolatey-InstallOrUpdate -PackageId vscode
+_chocolatey-InstallOrUpdate -PackageId git -PackageParameters "'/GitAndUnixToolsOnPath /WindowsTerminal'"

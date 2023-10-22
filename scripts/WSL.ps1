@@ -1,4 +1,4 @@
-Invoke-ExternalCommand -Command { choco install -y Microsoft-Windows-Subsystem-Linux --source="'windowsfeatures'" }
+_chocolatey-InstallOrUpdate -PackageId "Microsoft-Windows-Subsystem-Linux" -PackageParameters $packageParameters -Source "'windowsfeatures'"
 Invoke-ExternalCommand -Command { 
     try {
         #--- Ubuntu ---

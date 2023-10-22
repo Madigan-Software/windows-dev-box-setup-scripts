@@ -30,16 +30,53 @@ function _logMessage {
 function Invoke-ExternalCommand([scriptblock]$Command) {
     $Command | Out-String | Write-Verbose
     & $Command
+    $rC, $lEC = $?, $LASTEXITCODE
+    _logMessage -Message "RC: $($rC) - LEC: $($lEC)" -ForegroundColor Gray    
 
     # Need to check both of these cases for errors as they represent different items
     # - $?: did the powershell script block throw an error
     # - $lastexitcode: did a windows command executed by the script block end in error
-    if ((-not $?) -or ($lastexitcode -ne 0)) {
+    if ((!$rC) -or ($lEC -ne 0)) {
         if ($error -ne $null) {
             Write-Warning $error[0]
         }
         throw "Command failed to execute: $Command"
     }
+}
+
+function _chocolatey-InstallOrUpdate {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$PackageId
+       ,[Parameter()][string]$PackageParameters=""
+       ,[Parameter()][string]$Source=""
+    )
+
+    [array]$remotePackageList=$(choco search $PackageId --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
+    if ($null -eq $(Get-Command -Name choco)) {
+        throw "Chocolatey is not installed, unable to continue"
+        Exit 1
+    }
+
+    $remotePackageListVersion = ($remotePackageList.Version|Measure-Object -Maximum).Maximum
+    [array]$packageList=$(choco list $PackageId --local-only --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
+    $packageInstalledVersion=if ($PackageId -eq 'chocolatey') { $(@(($(choco --version) -as [Version]), $packageList.Version)|Measure-Object -Maximum).Maximum } else { $($packageList.Version|Measure-Object -Maximum).Maximum }
+
+    if ($remotePackageListVersion -gt $packageInstalledVersion) { 
+        Invoke-ExternalCommand { 
+            $chocoParameters=@()
+            $chocoParameters += 'upgrade'
+            $chocoParameters += $packageId
+            $chocoParameters += '--yes'
+            $chocoParameters += '--accept-licence'
+            $chocoParameters += '--force'
+            if ($null -ne $PackageParameters) { $chocoParameters += $('--package-parameters="{0}"' -f $PackageParameters) }
+            if ($null -ne $Source) { $chocoParameters += $('--source="{0}"' -f $Source) }
+            choco @chocoParameters
+            _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
+        }
+    }; 
+    Write-Host -Object ("$($packageId) v$(choco --version)") -ForegroundColor Cyan;
 }
 
 $RefreshEnvironment={
@@ -61,8 +98,9 @@ $_message = "*** [$($MyInvocation.MyCommand.Name)] Setting up developer workstat
 try {
     _logMessage -Message $_message
     if (((choco --version) -as [System.Version]) -lt [System.Version]("2.2.2")) { 
-        _logMessage -Message "Chocolatey v$(choco --version) <= v2.2.2"
-        Invoke-ExternalCommand -Command { choco upgrade chocolatey }
+        #_logMessage -Message "Chocolatey v$(choco --version) <= v2.2.2"
+        #Invoke-ExternalCommand -Command { choco upgrade chocolatey }
+        _chocolatey-InstallOrUpdate -PackageId Chocolatey
     }
 
     Disable-MicrosoftUpdate

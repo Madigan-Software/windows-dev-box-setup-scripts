@@ -1,9 +1,9 @@
 
 # tools we expect devs across many scenarios will want
 if ($Host.Name -ne 'Visual Studio Code Host') {
-    Invoke-ExternalCommand -Command { choco install -y vscode }
-    Invoke-ExternalCommand -Command { choco install -y vscode-insiders }
+    _chocolatey-InstallOrUpdate -PackageId vscode
+    _chocolatey-InstallOrUpdate -PackageId vscode-insiders
 }
-Invoke-ExternalCommand -Command { choco install -y git --package-parameters="'/GitAndUnixToolsOnPath /WindowsTerminal'" }
-Invoke-ExternalCommand -Command { choco install -y 7zip.install }
-Invoke-ExternalCommand -Command { choco install -y sysinternals }
+_chocolatey-InstallOrUpdate -PackageId git -PackageParameters "'/GitAndUnixToolsOnPath /WindowsTerminal'"
+_chocolatey-InstallOrUpdate -PackageId 7zip.install
+_chocolatey-InstallOrUpdate -PackageId sysinternals

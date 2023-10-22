@@ -2,6 +2,28 @@
 # Author: Microsoft
 # Common dev settings for desktop app development
 
+function _logMessage {
+    param(
+        [Parameter()][string]$Message
+        ,[Parameter()][ConsoleColor]$ForegroundColor
+        ,[Parameter()][ConsoleColor]$BackgroundColor
+        )
+
+    [bool]$useBoxstarterMessage = $($null -ne (Get-Command -name 'Write-BoxstarterMessage' -ErrorAction SilentlyContinue))
+    $ForegroundColor=if (!$ForegroundColor) { [ConsoleColor]::Yellow } else { $ForegroundColor }
+    $ForegroundColor=if ($useBoxstarterMessage) { $ForegroundColor } else { [System.Enum]::GetNames($ForegroundColor.GetType()) -match "$($ForegroundColor.ToString())"|Select-Object -Last 1 }
+    $BackgroundColor=if (!$BackgroundColor) { [ConsoleColor]::Yellow } else { $BackgroundColor }
+    $BackgroundColor=if ($useBoxstarterMessage) { $BackgroundColor } else { [System.Enum]::GetNames($BackgroundColor.GetType()) -match "$($BackgroundColor.ToString())"|Select-Object -Last 1 }
+
+    $commandParams=@{
+        "$(if ($useBoxstarterMessage) { 'message' } else { 'Object' })"=$Message;
+        "$(if ($useBoxstarterMessage) { 'color' } else { 'ForegroundColor' })"=$ForegroundColor;
+    }
+
+    if ($useBoxstarterMessage) { Write-BoxstarterMessage @commandParams } else { Write-Host @commandParams }
+    if ($useBoxstarterMessage) { Write-BoxstarterMessage @commandParams } else { Write-Host @commandParams }
+}
+
 function Invoke-ExternalCommand([scriptblock]$Command) {
     $Command | Out-String | Write-Verbose
     & $Command
@@ -15,6 +37,56 @@ function Invoke-ExternalCommand([scriptblock]$Command) {
         }
         throw "Command failed to execute: $Command"
     }
+}
+
+function _chocolatey-InstallOrUpdate {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$PackageId
+       ,[Parameter()][string]$PackageParameters=""
+       ,[Parameter()][string]$Source=""
+    )
+
+    [array]$remotePackageList=$(choco search $PackageId --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
+    if ($null -eq $(Get-Command -Name choco)) {
+        throw "Chocolatey is not installed, unable to continue"
+        Exit 1
+    }
+
+    $remotePackageListVersion = ($remotePackageList.Version|Measure-Object -Maximum).Maximum
+    [array]$packageList=$(choco list $PackageId --local-only --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
+    $packageInstalledVersion=if ($PackageId -eq 'chocolatey') { $(@(($(choco --version) -as [Version]), $packageList.Version)|Measure-Object -Maximum).Maximum } else { $($packageList.Version|Measure-Object -Maximum).Maximum }
+
+    if ($remotePackageListVersion -gt $packageInstalledVersion) { 
+        Invoke-ExternalCommand { 
+            $chocoParameters=@()
+            $chocoParameters += 'upgrade'
+            $chocoParameters += $packageId
+            $chocoParameters += '--yes'
+            $chocoParameters += '--accept-licence'
+            $chocoParameters += '--force'
+            if ($null -ne $PackageParameters) { $chocoParameters += $('--package-parameters="{0}"' -f $PackageParameters) }
+            if ($null -ne $Source) { $chocoParameters += $('--source="{0}"' -f $Source) }
+            choco @chocoParameters
+            _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
+        }
+    }; 
+    Write-Host -Object ("$($packageId) v$(choco --version)") -ForegroundColor Cyan;
+}
+
+$RefreshEnvironment={
+    $message = "*** Refresh Environment ***"
+    if ((Get-Command -Name 'Update-SessionEnvironment')) {
+        $message = $message -replace '\*\*\*$', '- Update-SessionEnvironment ***'
+        _logMessage -Message $message -ForegroundColor Yellow
+        Update-SessionEnvironment 
+    }
+    else { 
+        $message = $message -replace '\*\*\*$', '- RefreshEnv.cmd ***'
+        _logMessage -Message $message -ForegroundColor Yellow
+        RefreshEnv.cmd 
+    }
+    #&$LogSeperator
 }
 
 try {
