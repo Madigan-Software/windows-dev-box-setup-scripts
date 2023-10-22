@@ -65,8 +65,8 @@ function _chocolatey-InstallOrUpdate {
             $chocoParameters += '--yes'
             $chocoParameters += '--accept-licence'
             $chocoParameters += '--force'
-            if ($null -ne $PackageParameters) { $chocoParameters += $('--package-parameters="{0}"' -f $PackageParameters) }
-            if ($null -ne $Source) { $chocoParameters += $('--source="{0}"' -f $Source) }
+            if (![string]::IsNullOrWhiteSpace($PackageParameters)) { $chocoParameters += $('--package-parameters="{0}"' -f $PackageParameters) }
+            if (![string]::IsNullOrWhiteSpace($Source)) { $chocoParameters += $('--source="{0}"' -f $Source) }
             choco @chocoParameters
             _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
         }
