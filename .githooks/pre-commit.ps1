@@ -11,3 +11,6 @@ if ($env:GIT_AUTHOR_EMAIL -notmatch '@(non\.)?gmail\.com$') {
     exit 1
 }
 
+Get-ChildItem env:GIT*
+
+exit 0
