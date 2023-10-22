@@ -1,3 +1,4 @@
+#!powershell
 <#
 script
     - is automatically run when 'git pull' is called (because of git post-merge hook)

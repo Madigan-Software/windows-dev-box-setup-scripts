@@ -1,3 +1,4 @@
+#!powershell
 <#
 script
     - is automatically run after new commit is succesfully created (because of git post-commit hook)

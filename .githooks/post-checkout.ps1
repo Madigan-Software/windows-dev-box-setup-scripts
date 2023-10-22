@@ -1,3 +1,4 @@
+#!powershell
 [CmdletBinding()]
 param (
     $PreviousHead,

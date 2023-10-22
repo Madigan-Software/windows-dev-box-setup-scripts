@@ -1,3 +1,4 @@
+#!powershell
 <#
 script
     - is automatically run before any commit is created (because of git commit-msg hook)
