@@ -4,10 +4,10 @@
 
 
 # Verify user's Git config has appropriate email address
-if ($env:GIT_AUTHOR_EMAIL -notmatch '@(non\.)?gmail\.com$') {
+if ($env:GIT_AUTHOR_EMAIL -notmatch '@(users\.)(noreply\.)?github\.com$') {
     Write-Warning "Your Git email address '$env:GIT_AUTHOR_EMAIL' is not configured correctly."
-    Write-Warning "It should end with '@gmail.com' or '@non.gmail.com'."
-    Write-Warning "Use the command: 'git config --global user.email <name@gmail.com>' to set it correctly."
+    Write-Warning "It should end with '@github.com' or '@users.noreply.github.com'."
+    Write-Warning "Use the command: 'git config --global user.email <name@github.com>' to set it correctly."
     exit 1
 }
 
