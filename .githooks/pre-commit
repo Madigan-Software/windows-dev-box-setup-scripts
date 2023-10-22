@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# https://www.viget.com/articles/two-ways-to-share-git-hooks-with-your-team/
+# git config --global core.hooksPath .githooks
+
+# run from the root of the repo
+c:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File '.githooks\pre-commit.ps1'
+#.githooks/replace_by_git_vars.py readme.md README.md
+# If your filesystem is not case-sensitive you can use
+# .githooks/replace_by_git_vars.py README.template.md README.md
+
+
+
+# Example:
+# [![Integration Tests](https://github.com/{{ repository.name }}/actions/workflows/integration-tests.yaml/badge.svg?branch={{ current.branch }})](https://github.com/{{ repository.name }}/actions/workflows/integration-tests.yaml?query=branch%3A{{ current.branch }})

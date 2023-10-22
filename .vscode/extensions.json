@@ -1,5 +1,7 @@
 {
     "recommendations": [
-        "ms-vscode.powershell"
+        "ms-vscode.remote-repositories",
+        "ms-vscode.azure-repos",
+        "github.remotehub"
     ]
 }
