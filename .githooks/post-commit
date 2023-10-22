@@ -1,0 +1,8 @@
+#!/bin/sh
+echo "commit cancelled" # when error occurs, VSC automatically output first echo here, therefore this strange output
+echo "#####################"
+echo "###### POST-COMMIT git hook"
+echo "###### Pushes commit to remote GIT repository"
+#exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\post-commit.ps1"
+echo "#####################"
+exit
