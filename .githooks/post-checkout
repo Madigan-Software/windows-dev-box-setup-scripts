@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# https://www.viget.com/articles/two-ways-to-share-git-hooks-with-your-team/
+# git config --global core.hooksPath .githooks
+
+# run from the root of the repo
+# c:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File '.githooks\post-checkout.ps1' $1 $2 $3
