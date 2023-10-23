@@ -1,0 +1,13 @@
+#!/bin/bash
+echo "#####################"
+echo "###### PREPARE-COMMIT git hook"
+echo "###### Various checks" $(basename $0)
+#exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\pre-commit.ps1"
+FILE=$1
+MESSAGE=$(cat $FILE)
+TICKET=[$(git rev-parse --abbrev-ref HEAD | grep -Eo '^(\w+/)?(\w+[-_])?[0-9]+' | grep -Eo '(\w+[-])?[0-9]+' | tr "[:lower:]" "[:upper:]")]
+if [[ $TICKET == "[]" || "$MESSAGE" == "$TICKET"* ]];then
+  exit 0;
+fi
+
+echo "$TICKET $MESSAGE" > $FILE
