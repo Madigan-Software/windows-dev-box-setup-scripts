@@ -35,7 +35,7 @@ function Invoke-ExternalCommand([scriptblock]$Command) {
     
     $Command | Out-String | Write-Verbose
     try { & $Command } catch { throw } # catch is triggered ONLY if $exe can't be found, never for errors reported by $exe itself
-    $rC, $lEC = $?, $LASTEXITCODE
+    $rC, $lEC = $?, $(if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 })
     _logMessage -Message "RC: $($rC) - LEC: $($lEC)" -ForegroundColor Gray    
 
     # Need to check both of these cases for errors as they represent different items
@@ -45,7 +45,7 @@ function Invoke-ExternalCommand([scriptblock]$Command) {
         if ($error -ne $null) {
             Write-Warning $error[0]
         }
-        throw "Command failed to execute (exit code $LASTEXITCODE): $Command" # "$exe indicated failure (exit code $LASTEXITCODE; full command: $Args)."
+        throw "Command failed to execute (exit code $lEC): $Command" # "$exe indicated failure (exit code $LASTEXITCODE; full command: $Args)."
     }
 }
 
@@ -112,7 +112,7 @@ try {
     Disable-UAC
 
     Invoke-ExternalCommand -Command { 
-        [array]$featureList=$(choco feature --limit-output|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Skip 1 -First 1) -as [string] }; N='State'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [string] }; N='Description'; })
+        #region helper
         $_setFeatureState={
             [CmdletBinding()]
             param (
@@ -123,6 +123,8 @@ try {
                 choco feature $TargetState.ToString().ToLower() --name="'$($Feature.Id.ToString().Trim())'"
             }
         }
+        #endregion helper
+        [array]$featureList=$(choco feature --limit-output|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Skip 1 -First 1) -as [string] }; N='State'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [string] }; N='Description'; })
         $enabledList = $featureList|Where-Object { $_.Id -match "^(allowEmptyChecksumsSecure|autoUninstaller|checksumFiles|ignoreInvalidOptionsSwitches|logValidationResultsOnWarnings|powershellHost|showDownloadProgress|showNonElevatedWarnings|usePackageExitCodes|usePackageRepositoryOptimizations)$" }
         $disabledList = $featureList|Where-Object { $_.Id -notin $enabledList.Id}
         $disabledList|Foreach-Object {

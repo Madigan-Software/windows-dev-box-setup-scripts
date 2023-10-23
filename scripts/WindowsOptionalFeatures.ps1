@@ -1,3 +1,5 @@
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 <#
 Install optional windows features
     .NET Framework 3.5 (includes .NET 2.0 and 3.0) - all features

@@ -1,3 +1,5 @@
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 _chocolatey-InstallOrUpdate -PackageId "Microsoft-Windows-Subsystem-Linux" -PackageParameters $packageParameters -Source "'windowsfeatures'"
 Invoke-ExternalCommand -Command { 
     try {

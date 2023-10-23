@@ -2,6 +2,8 @@
 # Author: Microsoft
 # Common dev settings for machine learning using Windows and Linux native tools
 
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 function _logMessage {
     param(
         [Parameter()][string]$Message
@@ -25,17 +27,24 @@ function _logMessage {
 }
 
 function Invoke-ExternalCommand([scriptblock]$Command) {
+    # Workaround: Prevents 2> redirections applied to calls to this function
+    #             from accidentally triggering a terminating error.
+    #             See bug report at https://github.com/PowerShell/PowerShell/issues/4002
+    $ErrorActionPreference = 'Continue'
+    
     $Command | Out-String | Write-Verbose
-    & $Command
+    try { & $Command } catch { throw } # catch is triggered ONLY if $exe can't be found, never for errors reported by $exe itself
+    $rC, $lEC = $?, $(if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 })
+    _logMessage -Message "RC: $($rC) - LEC: $($lEC)" -ForegroundColor Gray    
 
     # Need to check both of these cases for errors as they represent different items
     # - $?: did the powershell script block throw an error
     # - $lastexitcode: did a windows command executed by the script block end in error
-    if ((-not $?) -or ($lastexitcode -ne 0)) {
+    if ((!$rC) -or (!$leC -and $lEC -ne 0)) {
         if ($error -ne $null) {
             Write-Warning $error[0]
         }
-        throw "Command failed to execute: $Command"
+        throw "Command failed to execute (exit code $lEC): $Command" # "$exe indicated failure (exit code $LASTEXITCODE; full command: $Args)."
     }
 }
 

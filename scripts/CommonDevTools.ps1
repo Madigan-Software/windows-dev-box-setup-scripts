@@ -1,3 +1,4 @@
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
 
 # tools we expect devs across many scenarios will want
 if ($Host.Name -ne 'Visual Studio Code Host') {

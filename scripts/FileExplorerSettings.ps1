@@ -1,3 +1,5 @@
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 Invoke-ExternalCommand -Command { 
     #--- Configuring Windows properties ---
     #--- Windows Features ---

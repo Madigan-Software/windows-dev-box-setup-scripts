@@ -1,3 +1,5 @@
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 Invoke-ExternalCommand -Command { 
     # installing Windows Template Studio VSIX
     Write-Host "Installing Windows Template Studio" -ForegroundColor "Yellow"

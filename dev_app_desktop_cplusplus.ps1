@@ -2,6 +2,8 @@
 # Author: Microsoft
 # Common dev settings for desktop app development
 
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 function _logMessage {
     param(
         [Parameter()][string]$Message

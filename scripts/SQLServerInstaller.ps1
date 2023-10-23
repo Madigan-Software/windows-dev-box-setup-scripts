@@ -3,6 +3,9 @@ param(
     [Parameter()][ValidateSet('2019','2022')][string]$Version='2022'
    ,[Parameter()][ValidateSet('dev')][string]$Sku='dev'
 )
+
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 [ValidateSet("sql-server")][string]$ProductName="sql-server"
 [ValidateSet("sql-server-2019","sql-server-2022")][string]$PackageId="$($ProductName)-$($Version)"
 
@@ -175,8 +178,6 @@ try {
 
     _logMessage -Message @'
 [TODO]:    Set SQL Server full text mode to rebuild'
-            Rename sa => default user
-            Enable the Named Pipes protocol in SQL Server Configuration Manager -> SQL Server Network Configuration -> Protocols for MSSQLSERVER
 '@ -ForegroundColor Yellow
 } finally {
     #if (Test-PendingReboot) { Invoke-Reboot }

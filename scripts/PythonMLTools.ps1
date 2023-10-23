@@ -1,3 +1,5 @@
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 # Install python
 # _chocolatey-InstallOrUpdate -PackageId python
 Invoke-ExternalCommand -Command { choco install -y python --version=3.5.4 }

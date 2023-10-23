@@ -2,6 +2,8 @@
 # Author: Microsoft
 # Common settings for azure devops
 
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 try {
     Disable-MicrosoftUpdate
     Disable-UAC
