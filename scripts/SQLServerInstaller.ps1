@@ -52,11 +52,11 @@ try {
     $commandArgs += '/ENU'
     #$commandArgs += '/UpdateEnabled'
     #$commandArgs += '/UpdateSource=MU'
-    # $commandArgs += '/NPEnabled=1'
-    # $commandArgs += '/TCPEnabled=1'
+    $commandArgs += '/NPEnabled=1'
+    $commandArgs += '/TCPEnabled=1'
     $commandArgs += '/SQLSYSADMINACCOUNTS=""{0}"" ""{1}""' -f "$($env:USERDOMAIN)\$($env:USERNAME)","BUILTIN\Administrators"
     $commandArgs += '/SQLMINMEMORY=0'
-    $commandArgs += '/SQLMAXMEMORY=2048'
+    $commandArgs += '/SQLMAXMEMORY={0}' -f $((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property capacity -Sum).sum /1mb /$((Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).sum))
     $commandArgs += '/SQLCOLLATION=SQL_Latin1_General_CP1_CI_AS'
     $commandArgs += '/SECURITYMODE=SQL'
     $commandArgs += '/SAPWD="{0}"' -f $sqlSAPwd
@@ -77,7 +77,7 @@ try {
 
     $commandArgs += '/SQLUSERDBDIR="C:\data\sql\Data"'
     $commandArgs += '/SQLUSERDBLOGDIR="C:\data\sql\Log"'
-    
+
     $commandArgs += '/IGNOREPENDINGREBOOT'
     
     _logMessage -Message @"
@@ -103,6 +103,75 @@ try {
 ========================================================================================================================
 "@ -ForegroundColor Magenta
     _chocolatey-InstallOrUpdate -PackageId "$($ProductName)-management-studio" -PackageParameters $packageParameters
+    
+    _logMessage -Message @"
+
+========================================================================================================================
+*                                               P o s t   I n s t a l l                                               *
+========================================================================================================================
+"@ -ForegroundColor Magenta
+    function Using-Object
+    {
+        [CmdletBinding()]
+        param (
+            [Parameter(Mandatory = $true)][AllowEmptyString()][AllowEmptyCollection()][AllowNull()][Object]$InputObject
+           ,[Parameter(Mandatory = $true)][scriptblock]$ScriptBlock
+        )
+    
+        try {
+            & $ScriptBlock
+        } finally {
+            if ($null -ne $InputObject -and $InputObject -is [System.IDisposable]) {
+                $InputObject.Dispose()
+            }
+        }
+    }
+
+    $commandList = [System.Collections.ArrayList]::new()
+    try {
+        Using-Object ($sqlConnection = [System.Data.SqlClient.SqlConnection]::new("Data Source=$($env:COMPUTERNAME);Initial Catalog=master; Integrated Security=True;")) {
+            $sqlConnection.Open()
+            $content = $null #Get-Content $scriptFileNameGoesHere
+            [void]($commandList.Add('SELECT [Server]=@@ServerName'))
+            [void]($commandList.Add('
+            USE [master]; 
+            IF NOT EXISTS (SELECT 1 FROM master.sys.server_principals WHERE [name] = N''defaultuser'' and [type] IN (''C'',''E'', ''G'', ''K'', ''S'', ''U'')) AND EXISTS (SELECT 1 FROM master.sys.server_principals WHERE [name] = N''sa'' and [type] IN (''C'',''E'', ''G'', ''K'', ''S'', ''U'')) BEGIN 
+                DECLARE @sql NVARCHAR(MAX) =''ALTER LOGIN [sa] WITH NAME = [defaultuser]; ''
+                EXEC sp_executesql @sql
+            END'))
+            $content|Where-Object {$null -ne $_} | Foreach-Object {
+                Write-Verbose -Message "[002.2]" -Verbose
+                $command=$_
+                if ($command.Trim() -eq "GO") { $commandList.Add($command); $command = "" } 
+                else { $command =  $command + $_ +"`r`n" }
+            }
+            $commandList | ForEach-Object {
+                $command=$_
+                Using-Object ($sqlCommand = [System.Data.SqlClient.SqlCommand]::new($command, $sqlConnection)) {
+                    $DataSet = [System.Data.DataSet]::new()
+                    try {
+                        if ($sqlCommand.CommandText -match 'SELECT ') {
+                            $SqlAdapter = [System.Data.SqlClient.SqlDataAdapter]::new()
+                            $SqlAdapter.SelectCommand = $sqlCommand
+                            $result=$SqlAdapter.Fill($DataSet)
+                            Write-Host -Object ("Result For $($command): $($result)") -ForegroundColor Cyan
+                        } else {
+                            $sqlCommand.ExecuteNonQuery()
+                        }
+                    } catch {
+                        <#Do this if a terminating exception happens#>
+                        Throw [Exception]::new("Error occurred executing Command: $(if ($sqlCommand.CommandText -match 'SELECT ') { 'ExecuteReader' } else { 'ExecuteNonQuery' })`n$($command|Out-String)", $_.Exception)
+                    } finally{
+                    }
+                    $DataSet.Tables[0]
+                }
+            }
+        }
+    }
+    catch {
+        <#Do this if a terminating exception happens#>
+        Throw [Exception]::new("Error occurred executing post database install commands`n$($commandList|Out-String)", $_.Exception)
+    }
 
     _logMessage -Message @'
 [TODO]:    Set SQL Server full text mode to rebuild'
