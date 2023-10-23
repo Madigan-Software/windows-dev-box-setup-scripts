@@ -9,6 +9,8 @@ echo "#####################"
 echo "###### PRE-COMMIT git hook"
 echo "###### Various checks"
 exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\pre-commit.ps1"
+
+#exec powershell.exe -NoProfile -ExecutionPolicy Bypass -Command { & .\.githooks\pre-commit.ps1; exit $LASTEXITCODE; }
 #c:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -ExecutionPolicy RemoteSigned -File '.githooks\pre-commit.ps1'
 
 #.githooks/replace_by_git_vars.py readme.md README.md
