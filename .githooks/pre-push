@@ -1,0 +1,28 @@
+#!/bin/sh
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+# get computer name to append in Chime message
+username=$USER
+
+# a branch name where you want to prevent git push. In this case, it's "master"
+if [ "$branch" = "master" ]; then
+  echo "You can't commit directly to '"${branch}"' branch" # webstorm or intellij will show this as popup
+  curl -X POST "<Chime-Webhook-URL>" -H "Content-Type:application/json" --data '{"Content": "@All 🚧  '@"${username}"' trying to push code to '"${branch}"'. \n Please note that commit is not blocked but it is discouraged to push code directly to '"${branch}"'."}'
+  exit 1 # if you remove this line then it won't block push but send message to group and on command line
+fi
+
+
+# Things you need to do - 
+# 1. Copy above code
+# 2. Go to your project/.git/hooks
+# 3. Copy pre-push.sample and rename it to pre-push
+# 4. Paste the above code
+# 5. Make this file executable - $ chmod +x .git/hooks/pre-commit
+# 6. Voila! Now you will see your push is failing in "master" branch
+# 7. If you use Amazon Chime then create a webhook URL and replace the in cURL or add code which sends message to Slack or 
+# your preferred communication channel
+
+# ---------------------AMAZON CHIME DOCS----------------------- #
+# Amazon Chime Webhook documentation
+# https://docs.aws.amazon.com/chime/latest/ug/webhooks.html
