@@ -28,8 +28,13 @@ function _logMessage {
 }
 
 function Invoke-ExternalCommand([scriptblock]$Command) {
+    # Workaround: Prevents 2> redirections applied to calls to this function
+    #             from accidentally triggering a terminating error.
+    #             See bug report at https://github.com/PowerShell/PowerShell/issues/4002
+    $ErrorActionPreference = 'Continue'
+    
     $Command | Out-String | Write-Verbose
-    & $Command
+    try { & $Command } catch { throw } # catch is triggered ONLY if $exe can't be found, never for errors reported by $exe itself
     $rC, $lEC = $?, $LASTEXITCODE
     _logMessage -Message "RC: $($rC) - LEC: $($lEC)" -ForegroundColor Gray    
 
@@ -40,7 +45,7 @@ function Invoke-ExternalCommand([scriptblock]$Command) {
         if ($error -ne $null) {
             Write-Warning $error[0]
         }
-        throw "Command failed to execute: $Command"
+        throw "Command failed to execute (exit code $LASTEXITCODE): $Command" # "$exe indicated failure (exit code $LASTEXITCODE; full command: $Args)."
     }
 }
 
