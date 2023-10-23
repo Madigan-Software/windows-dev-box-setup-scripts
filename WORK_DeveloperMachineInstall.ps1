@@ -173,7 +173,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     #--- Setting up Windows OS ---
     _logMessage -Message "*** [005] - Setting up Windows OS" -ForegroundColor Gray
     #executeScript "scripts/WinGetInstaller.ps1"
-    executeScript "scripts/WindowsOptionalFeatures.ps1"
+    #executeScript "scripts/WindowsOptionalFeatures.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
 
     #--- Setting up Common Folders ---
