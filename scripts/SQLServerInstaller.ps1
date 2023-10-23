@@ -54,7 +54,7 @@ try {
     #$commandArgs += '/UpdateSource=MU'
     # $commandArgs += '/NPEnabled=1'
     # $commandArgs += '/TCPEnabled=1'
-    $commandArgs += '/SQLSYSADMINACCOUNTS="{0}" "{1}"' -f "$($env:USERDOMAIN)\$($env:USERNAME)","BUILTIN\Administrators"
+    $commandArgs += '/SQLSYSADMINACCOUNTS=""{0}"" ""{1}""' -f "$($env:USERDOMAIN)\$($env:USERNAME)","BUILTIN\Administrators"
     $commandArgs += '/SQLMINMEMORY=0'
     $commandArgs += '/SQLMAXMEMORY=2048'
     $commandArgs += '/SQLCOLLATION=SQL_Latin1_General_CP1_CI_AS'
