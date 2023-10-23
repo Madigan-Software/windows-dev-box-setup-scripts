@@ -41,7 +41,7 @@ function Invoke-ExternalCommand([scriptblock]$Command) {
     # Need to check both of these cases for errors as they represent different items
     # - $?: did the powershell script block throw an error
     # - $lastexitcode: did a windows command executed by the script block end in error
-    if ((!$rC) -or ($lEC -ne 0)) {
+    if ((!$rC) -or (!$leC -and $lEC -ne 0)) {
         if ($error -ne $null) {
             Write-Warning $error[0]
         }
