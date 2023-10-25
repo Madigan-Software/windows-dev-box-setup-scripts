@@ -1,5 +1,139 @@
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
 
+#region functions
+
+function ConvertFrom-Text {
+    [cmdletbinding(DefaultParameterSetName = "File")]
+    [alias("cft")]
+    Param(
+        [Parameter(Position = 0, Mandatory, HelpMessage = "Enter a regular expression pattern that uses named captures")]
+        [ValidateScript( {
+            if (($_.GetGroupNames() | Where-Object {$_ -notmatch "^\d{1}$"}).Count -ge 1) {
+                $True
+            }
+            else {
+                Throw "No group names found in your regular expression pattern."
+            }
+        })]
+        [Alias("regex", "rx")]
+        [regex]$Pattern,
+
+        [Parameter(Position = 1, Mandatory, ParameterSetName = 'File')]
+        [ValidateScript( {Test-Path $_})]
+        [alias("file")]
+        [string]$Path,
+
+        [Parameter(Position = 1, Mandatory, ValueFromPipeline, ParameterSetName = 'InputObject')]
+        [ValidateNotNullOrEmpty()]
+        [ValidateScript( {
+            if ($_ -match "\S+") {
+                $true
+            }
+            else {
+                Throw "Cannot process an empty or null line of next."
+                $false
+            }
+        })]
+        [string]$InputObject,
+
+        [Parameter(HelpMessage = "Enter an optional typename for the object output.")]
+        [ValidateNotNullOrEmpty()]
+        [string]$TypeName,
+
+        [Parameter(HelpMessage = "Do not use Write-Progress to report on processing. This can improve performance on large data sets.")]
+        [switch]$NoProgress
+    )
+
+    Begin {
+        $begin = Get-Date
+        Write-Verbose "$((Get-Date).TimeOfDay) Starting $($MyInvocation.MyCommand)"
+        Write-Verbose "$((Get-Date).TimeOfDay) Using pattern $($pattern.ToString())"
+
+        if ($NoProgress) {
+            Write-Verbose "$((Get-Date).TimeOfDay) Suppressing progress bar"
+            $ProgressPreference = "SilentlyContinue"
+        }
+        #Get the defined capture names
+        $names = $pattern.GetGroupNames() | Where-Object {$_ -notmatch "^\d+$"}
+        Write-Verbose "$((Get-Date).TimeOfDay) Using names: $($names -join ',')"
+
+        #define a hashtable of parameters to splat with Write-Progress
+        $progParam = @{
+            Activity = $MyInvocation.MyCommand
+            Status   = "pre-processing"
+        }
+    } #begin
+
+    Process {
+        If ($PSCmdlet.ParameterSetName -eq 'File') {
+            Write-Verbose "$((Get-Date).TimeOfDay) Processing $Path"
+            Try {
+                $progParam.CurrentOperation = "Getting content from $path"
+                $progParam.Status = "Processing"
+                Write-Progress @progParam
+                $content = Get-Content -Path $path | Where-Object {$_ -match "\S+"}
+                Write-Verbose "$((Get-Date).TimeOfDay) Will process $($content.count) entries"
+            } #try
+            Catch {
+                Write-Warning "Could not get content from $path. $($_.Exception.Message)"
+                Write-Verbose "$((Get-Date).TimeOfDay) Exiting function"
+                #Bail out
+                Return
+            }
+        } #if file parameter set
+        else {
+            Write-Verbose "$((Get-Date).TimeOfDay) processing input: $InputObject"
+            $content = $InputObject
+        }
+
+        if ($content) {
+            Write-Verbose "$((Get-Date).TimeOfDay) processing content"
+            $content |  foreach-object -begin {$i = 0} -process {
+                #calculate percent complete
+                $i++
+                $pct = ($i / $content.count) * 100
+                $progParam.PercentComplete = $pct
+                $progParam.Status = "Processing matches"
+                Write-Progress @progParam
+                #process each line of the text file
+
+                foreach ($match in $pattern.matches($_)) {
+                    Write-Verbose "$((Get-Date).TimeOfDay) processing match"
+                    $progParam.CurrentOperation = $match
+                    Write-Progress @progParam
+
+                    #get named matches and create a hash table for each one
+                    $progParam.Status = "Creating objects"
+                    Write-Verbose "$((Get-Date).TimeOfDay) creating objects"
+                    $hash = [ordered]@{}
+                    if ($TypeName) {
+                        Write-Verbose "$((Get-Date).TimeOfDay) using a custom property name of $Typename"
+                        $hash.Add("PSTypeName",$Typename)
+                    }
+                    foreach ($name in $names) {
+                        $progParam.CurrentOperation = $name
+                        Write-Progress @progParam
+                        Write-Verbose "$((Get-Date).TimeOfDay) getting $name"
+                        #initialize an ordered hash table
+                        #add each name as a key to the hash table and the corresponding regex value
+                        $hash.Add($name, $match.groups["$name"].value.Trim())
+                    }
+                    Write-Verbose "$((Get-Date).TimeOfDay) writing object to pipeline"
+                    #write a custom object to the pipeline
+                    [PSCustomObject]$hash
+                }
+            } #foreach line in the content
+        } #if $content
+    } #process
+
+    End {
+        Write-Verbose "$((Get-Date).TimeOfDay) Ending $($MyInvocation.MyCommand)"
+        $end = Get-Date
+        Write-Verbose "$((Get-Date).TimeOfDay) Total processing time $($end-$begin)"
+    } #end
+
+} #end function
+
 function Log-Action {
     [CmdletBinding()]
     param (
@@ -70,6 +204,8 @@ function Clone-AzDevOpsRepository {
 
     Write-Warning -Message "$RepositoryName already has already been cloned - Skipping"
 }
+
+#endregion functions
 
 # (optional) SQL Developer Bundle (https://www.red-gate.com/account )
 choco install --yes dotnetdeveloperbundle # ANTS Performance Profiler Pro,ANTS Memory Profiler,.NET Reflector VSPro
@@ -149,16 +285,40 @@ choco install --yes sharex
 # Azure CLI (https://aka.ms/installazurecliwindows )
 choco install --yes azure-cli
 $extensions=@('azure-devops','bicep')
-$azureExtensions=Invoke-CommandInPath -Path (Get-Location) -ScriptBlock ([scriptblock]::Create("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"az extension list-available --output jsonc`""))|ConvertFrom-Json|Select-Object -unique name,summary,version,installed,experimental,preview
-$azureExtensions=$azureExtensions|Where-Object { $_.name -match ('({0})' -f $extensions -join '|') -and !$_.installed}
+Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '", "')")')") -ScriptBlock {
+    $azureExtensions=Invoke-CommandInPath -Path (Get-Location) -ScriptBlock ([scriptblock]::Create("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"az extension list-available --output jsonc`""))|ConvertFrom-Json|Select-Object -unique name,summary,version,installed,experimental,preview
+    $azureExtensions=$azureExtensions|Where-Object { $_.name -match ('({0})' -f $extensions -join '|') -and !$_.installed}
 
-$azCliInstallCommands = ($azureExtensions, $($extensions|Where-Object{ $_ -notmatch ('({0})' -f $($azureExtensions.name -join '|'))}|ForEach-Object { @{ name=$_; summary=$null; version='0.0.0'; installed=$false; experimental=$false;preview=$false; } }))|Where-Object {!$_.installed}|Select-Object -ExpandProperty name|ForEach-Object {
-    switch ($_) {
-        'bicep' { "az $($_) install" }
-        Default { "az extension add --name $($_)"}
+    $azCliInstallCommands = ($azureExtensions, $($extensions|Where-Object{ $_ -notmatch ('({0})' -f $($azureExtensions.name -join '|'))}|ForEach-Object { @{ name=$_; summary=$null; version='0.0.0'; installed=$false; experimental=$false;preview=$false; } }))|Where-Object {!$_.installed}|Select-Object -ExpandProperty name|ForEach-Object {
+        switch ($_) {
+            'bicep' { "az $($_) install" }
+            Default { "az extension add --name $($_)"}
+        }
+    }
+    Invoke-CommandInPath -Path (Get-Location) -ScriptBlock ([scriptblock]::Create(($azCliInstallCommands -join "`n")))
+
+    $powershellCommand=(@'
+function ConvertFrom-Text {
+<<ConvertFrom-Text>>
+} #end function
+
+<<COMMANDS>>
+'@).Replace('<<ConvertFrom-Text>>', $((Get-Command -Name 'ConvertFrom-Text')).Definition).Replace('<<COMMANDS>>',@'
+(az --version|Where-Object { $_ -match '(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)' })
+'@)
+    $scriptBlock=([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+    #$result=Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
+    $result=(az --version|Where-Object { $_ -match '(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)' })
+    $componentNamePattern=[regex]::new('(?<name>\b(?:\w+)(?:\-*)(?:\w+)\s*\b)')
+    $versionPattern='(?<version>\b(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)\b)'
+    $updateAvailablePattern='((?<updateAvailable>\b((\s+\*+)))|(?<updateAvailable>\b(?:(\s+\*+)?))\b)'
+    $updatesAvailable=($result|ConvertFrom-Text -Pattern "$($componentNamePattern)$($versionPattern)$($updateAvailablePattern)"|Where-Object{ ![string]::IsNullOrWhiteSpace($_.updateAvailable) })
+    $doCliUpgrade=($updatesAvailable.Count -gt 0)
+    if ($doCliUpgrade) {
+        $updatesAvailable
+        Invoke-CommandInPath -Path (Get-Location) -ScriptBlock { (az upgrade) <# --all true #> }
     }
 }
-Invoke-CommandInPath -Path (Get-Location) -ScriptBlock ([scriptblock]::Create(($azCliInstallCommands -join "`n")))
 
 #az upgrade
 
