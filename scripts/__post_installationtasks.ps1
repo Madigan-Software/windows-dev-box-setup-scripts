@@ -1,6 +1,33 @@
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
 
 #region functions
+#region helpers
+
+$powershellCommandTemplate = (@'
+<<FUNCTIONS>>
+
+<<COMMANDS>>
+'@)
+
+function Clone-AzDevOpsRepository {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)][string]$Organisation
+        , [Parameter(Mandatory)][string]$Project
+        , [Parameter(Mandatory)][string]$RepositoryName
+        , [Parameter(Mandatory)][string]$LocalRepositoryPath
+    )
+
+    $localGitPath = (Join-Path -Path (Join-Path -Path $LocalRepositoryPath -ChildPath $RepositoryName) -ChildPath '.git')
+    $checkIfLocalRepositoryExists = (Test-Path -Path $localGitPath -PathType Container) # [Microsoft.PowerShell.Commands.TestPathType]::Container
+
+    if (!$checkIfLocalRepositoryExists) {
+        Invoke-CommandInPath -Path $LocalRepositoryPath -ScriptBlock { git clone "https://dev.azure.com/$($Organisation)/$($Project)/_git/$($RepositoryName)" }
+        return
+    }
+
+    Write-Warning -Message "$RepositoryName already has already been cloned - Skipping"
+} #end function
 
 function ConvertFrom-Text {
     [cmdletbinding(DefaultParameterSetName = "File")]
@@ -8,32 +35,32 @@ function ConvertFrom-Text {
     Param(
         [Parameter(Position = 0, Mandatory, HelpMessage = "Enter a regular expression pattern that uses named captures")]
         [ValidateScript( {
-            if (($_.GetGroupNames() | Where-Object {$_ -notmatch "^\d{1}$"}).Count -ge 1) {
-                $True
-            }
-            else {
-                Throw "No group names found in your regular expression pattern."
-            }
-        })]
+                if (($_.GetGroupNames() | Where-Object { $_ -notmatch "^\d{1}$" }).Count -ge 1) {
+                    $True
+                }
+                else {
+                    Throw "No group names found in your regular expression pattern."
+                }
+            })]
         [Alias("regex", "rx")]
         [regex]$Pattern,
 
         [Parameter(Position = 1, Mandatory, ParameterSetName = 'File')]
-        [ValidateScript( {Test-Path $_})]
+        [ValidateScript( { Test-Path $_ })]
         [alias("file")]
         [string]$Path,
 
         [Parameter(Position = 1, Mandatory, ValueFromPipeline, ParameterSetName = 'InputObject')]
         [ValidateNotNullOrEmpty()]
         [ValidateScript( {
-            if ($_ -match "\S+") {
-                $true
-            }
-            else {
-                Throw "Cannot process an empty or null line of next."
-                $false
-            }
-        })]
+                if ($_ -match "\S+") {
+                    $true
+                }
+                else {
+                    Throw "Cannot process an empty or null line of next."
+                    $false
+                }
+            })]
         [string]$InputObject,
 
         [Parameter(HelpMessage = "Enter an optional typename for the object output.")]
@@ -54,7 +81,7 @@ function ConvertFrom-Text {
             $ProgressPreference = "SilentlyContinue"
         }
         #Get the defined capture names
-        $names = $pattern.GetGroupNames() | Where-Object {$_ -notmatch "^\d+$"}
+        $names = $pattern.GetGroupNames() | Where-Object { $_ -notmatch "^\d+$" }
         Write-Verbose "$((Get-Date).TimeOfDay) Using names: $($names -join ',')"
 
         #define a hashtable of parameters to splat with Write-Progress
@@ -71,7 +98,7 @@ function ConvertFrom-Text {
                 $progParam.CurrentOperation = "Getting content from $path"
                 $progParam.Status = "Processing"
                 Write-Progress @progParam
-                $content = Get-Content -Path $path | Where-Object {$_ -match "\S+"}
+                $content = Get-Content -Path $path | Where-Object { $_ -match "\S+" }
                 Write-Verbose "$((Get-Date).TimeOfDay) Will process $($content.count) entries"
             } #try
             Catch {
@@ -88,7 +115,7 @@ function ConvertFrom-Text {
 
         if ($content) {
             Write-Verbose "$((Get-Date).TimeOfDay) processing content"
-            $content |  foreach-object -begin {$i = 0} -process {
+            $content |  foreach-object -begin { $i = 0 } -process {
                 #calculate percent complete
                 $i++
                 $pct = ($i / $content.count) * 100
@@ -108,7 +135,7 @@ function ConvertFrom-Text {
                     $hash = [ordered]@{}
                     if ($TypeName) {
                         Write-Verbose "$((Get-Date).TimeOfDay) using a custom property name of $Typename"
-                        $hash.Add("PSTypeName",$Typename)
+                        $hash.Add("PSTypeName", $Typename)
                     }
                     foreach ($name in $names) {
                         $progParam.CurrentOperation = $name
@@ -134,45 +161,78 @@ function ConvertFrom-Text {
 
 } #end function
 
-function Log-Action {
+function Create-SymbolicLink {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory)][scriptblock]$ScriptBlock
-       ,[Parameter()][string]$Title
-       ,[Parameter()][System.ConsoleColor]$ForegroundColor=[System.ConsoleColor]::Cyan
+        # Parameter help description
+        [Parameter(Mandatory)][object[]]$SymbolicLinks
     )
     
-    begin {
-        $maxMessageLength = 120
-        [string[]]$message= @()
-        $message += "`n$("*" * $maxMessageLength)"
-        if (![string]::IsNullOrWhiteSpace($Title)) {
-            $messageSpacingLength=($maxMessageLength - 4 -$Title.Length) / 2
-            $spacing = ' ' * $messageSpacingLength
-            $message += "`n* $($spacing)$($Title)$($spacing) *"
-            $message += "`n$("*" * $maxMessageLength)"
-        }
-        Write-Host -Object $message -ForegroundColor $ForegroundColor
-    }
-    
+    begin { }
     process {
-        & $ScriptBlock
+        foreach ($SymbolicLink in $SymbolicLinks) {
+            [void](Remove-Item $SymbolicLink.SymbolicLink -Force -ErrorAction SilentlyContinue)
+            [void](New-Item -Force -ItemType SymbolicLink -Path $SymbolicLink.SymbolicLink -Target $SymbolicLink.SymbolicLinkTarget)
+                
+            if ($SymbolicLink.Backup.IsPresent -and $SymbolicLink.Backup.ToBool() -eq $true) {
+                $backupTarget = "$($Target)-Backup-$($(New-Guid).Guid)"
+                [void]($result = Copy-Item -Path $SymbolicLink.SymbolicLinkTarget -Destination $backupTarget -Recurse -Force -PassThru)
+                
+                Write-Verbose -Message ($result | Out-String -Width 4095) -Verbose
+            }
+        }
     }
-    
-    end {
-        $message = "$("*" * $maxMessageLength)"
-        Write-Host -Object $message -ForegroundColor $ForegroundColor
+    end { }
+} #end function
+
+function Get-Execution {
+    $CallStack = Get-PSCallStack | Select-Object -Property *
+    if (
+         ($CallStack.Count -ne $null) -or
+         (($CallStack.Command -ne '<ScriptBlock>') -and
+         ($CallStack.Location -ne '<No file>') -and
+         ($CallStack.ScriptName -ne $Null))
+    ) {
+        if ($CallStack.Count -eq 1) {
+            $Output = $CallStack[0]
+            $Output | Add-Member -MemberType NoteProperty -Name ScriptLocation -Value $((Split-Path $_.ScriptName)[0]) -PassThru
+        }
+        else {
+            $Output = $CallStack[($CallStack.Count – 1)]
+            $Output | Add-Member -MemberType NoteProperty -Name ScriptLocation -Value $((Split-Path $Output.ScriptName)[0]) -PassThru
+        }
     }
+    else {
+        Write-Error -Message 'No callstack detected' -Category 'InvalidData'
+    }
+}
+
+function Get-IndentationLevel {
+    $level = 0
+    $CallStack = Get-PSCallStack | Select-Object -Property *
+    if (
+         ($CallStack.Count -ne $null) -or
+         (($CallStack.Command -ne '<ScriptBlock>') -and
+         ($CallStack.Location -ne '<No file>') -and
+         ($CallStack.ScriptName -ne $Null))
+    ) {
+        $level = $CallStack.Count – 1
+    }
+    else {
+        Write-Error -Message 'No callstack detected' -Category 'InvalidData'
+    }
+
+    return $level
 }
 
 function Invoke-CommandInPath {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)][scriptblock]$ScriptBlock
-       ,[Parameter(Mandatory)][string]$Path
+        , [Parameter(Mandatory)][string]$Path
     )
 
-    try{
+    try {
         if (!(Test-Path -Path $Path)) {
             Write-Host -Object ("Creating folder '$($Path)'")
             New-Item -ItemType Directory -Path $Path -Force -ErrorAction SilentlyContinue
@@ -180,32 +240,373 @@ function Invoke-CommandInPath {
 
         Push-Location $Path
         & $ScriptBlock
-    } finally {
+    }
+    finally {
         Pop-Location
     }
-}
+} #end function
 
-function Clone-AzDevOpsRepository {
+function Log-Action {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory)][string]$Organisation
-       ,[Parameter(Mandatory)][string]$Project
-       ,[Parameter(Mandatory)][string]$RepositoryName
-       ,[Parameter(Mandatory)][string]$LocalRepositoryPath
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock
+        , [Parameter()][string]$Title
+        , [Parameter()][System.ConsoleColor]$ForegroundColor = [System.ConsoleColor]::Cyan
+        , [Parameter()][switch]$NoHeader
     )
+    
+    begin {
+        $maxMessageLength = 120
+        
+        [string[]]$message = @()
+        $message = $title
+        $writeHostMessage = { Write-Host -Object "$($message)" -ForegroundColor $ForegroundColor }
 
-    $localGitPath = (Join-Path -Path (Join-Path -Path $LocalRepositoryPath -ChildPath $RepositoryName) -ChildPath '.git')
-    $checkIfLocalRepositoryExists=(Test-Path -Path $localGitPath -PathType Container) # [Microsoft.PowerShell.Commands.TestPathType]::Container
+        [int]$level = if ((($level = ($(Get-IndentationLevel) - 3)) -le 0)) { 0 } else { 
+            # Write-Host ($level) -ForegroundColor Cyan
+            # Write-Host ($level - 1) -ForegroundColor Cyan
+            $level - $(if ($level -le 2) { 1 } else { $level - 1 }) 
+        }
+        $padding = ' ' * $level
+        $writeHostMessage = { Write-Host -Object "$(if($padding.Length -gt 0) { " -$($padding)" })$($message)" -ForegroundColor $ForegroundColor }
 
-    if (!$checkIfLocalRepositoryExists) {
-        Invoke-CommandInPath -Path $LocalRepositoryPath -ScriptBlock { git clone "https://dev.azure.com/$($Organisation)/$($Project)/_git/$($RepositoryName)" }
-        return
+        if (!$NoHeader.IsPresent -or $NoHeader.ToBool() -eq $false) {
+            $message += "`n$("*" * $maxMessageLength)"
+            if (![string]::IsNullOrWhiteSpace($Title)) {
+                $messageSpacingLength = ($maxMessageLength - 4 - $Title.Length) / 2
+                $spacing = ' ' * $messageSpacingLength
+                $message += "`n* $($spacing)$($Title)$($spacing) *"
+                $message += "`n$("*" * $maxMessageLength)"
+                Write-Host -Object $message -ForegroundColor $ForegroundColor
+            }
+            else {
+                &$writeHostMessage
+            }
+        }
+        else {
+            &$writeHostMessage
+        }
     }
+    
+    process {
+        & $ScriptBlock
+    }
+    
+    end {
+        if (!$NoHeader.IsPresent -or $NoHeader.ToBool() -eq $false) {
+            $message = "$("*" * $maxMessageLength)"
+            Write-Host -Object $message -ForegroundColor $ForegroundColor
+        }
+    }
+} #end function
 
-    Write-Warning -Message "$RepositoryName already has already been cloned - Skipping"
-}
-
+#region Proxy Functions
+<#
+$WriteHostAutoIndent = $true
+$WriteHostIndentSize = 1
+function Write-Host {
+    #.Synopsis
+    #  Wraps Write-Host with support for indenting based on stack depth.
+    #.Description
+    #  This Write-Host cmdlet customizes output. You can indent the text using PadIndent, or indent based on stack depth using AutoIndent or by setting the global variable $WriteHostAutoIndent = $true.
+    #
+    #  You can specify the color of text by using the ForegroundColor parameter, and you can specify the background color by using the BackgroundColor parameter. The Separator parameter lets you specify a string to use to separate displayed objects. The particular result depends on the program that is hosting Windows PowerShell.
+    #.Example
+    #  write-host "no newline test >" -nonewline
+    #  no newline test >C:\PS>
+    #
+    #  This command displays the input to the console, but because of the NoNewline parameter, the output is followed directly by the prompt.
+    #.Example
+    #  C:\PS> write-host (2,4,6,8,10,12) -Separator ", -> " -foregroundcolor DarkGreen -backgroundcolor white
+    #  2, -> 4, -> 6, -> 8, -> 10, -> 12
+    #
+    #  This command displays the even numbers from 2 through 12. The Separator parameter is used to add the string , -> (comma, space, -, >, space).
+    #.Example
+    #  write-host "Red on white text." -ForegroundColor red -BackgroundColor white
+    #  Red on white text.
+    #
+    #  This command displays the string "Red on white text." The text is red, as defined by the ForegroundColor parameter. The background is white, as defined by the BackgroundColor parameter.
+    #.Example
+    #  $WriteHostAutoIndent = $true
+    #  C:\PS>&{
+    #  >> Write-Host "Level 1"
+    #  >> &{ Write-Host "Level 2" 
+    #  >> &{ Write-Host "Level 3" } 
+    #  >> Write-Host "Level 2"
+    #  >> } }
+    #    Level 1
+    #      Level 2
+    #        Level 3
+    #      Level 2
+    #
+    #  This command displays how you can set WriteHostAutoIndent to control the output of a series of nested functions that use Write-Host for logging...
+    #.Inputs
+    #  System.Object
+    #  You can pipe objects to be written to the host
+    #.Outputs
+    #  None
+    #  Write-Host sends objects to the host. It does not return any objects. However, the host might display the objects that Write-Host sends to it.
+    [CmdletBinding(HelpUri = 'http://go.microsoft.com/fwlink/?LinkID=113426', RemotingCapability = 'None')]
+    param(
+        # Objects to display in the console.
+        [Parameter(Position = 0, ValueFromPipeline = $true, ValueFromRemainingArguments = $true)]
+        [System.Object[]]
+        ${Object},
+    
+        # Specifies that the content displayed in the console does not end with a newline character.
+        [switch]
+        ${NoNewline},
+    
+        # String to the output between objects displayed on the console.
+        [System.Object]
+        ${Separator},
+    
+        # Specifies the text color. There is no default.
+        [System.ConsoleColor]
+        ${ForegroundColor},
+    
+        # Specifies the background color. There is no default
+        [System.ConsoleColor]
+        ${BackgroundColor},
+    
+        # If set, Write-Host will indent based on the stack depth.  Defaults to the global preference variable $WriteHostAutoIndent (False).
+        [Switch]
+        $AutoIndent = $(if ($Global:WriteHostAutoIndent) { $Global:WriteHostAutoIndent } else { $False }),
+       
+        # Amount to indent (before auto indent).  Defaults to the global preference variable $WriteHostPadIndent (0).
+        [Int]
+        $PadIndent = $(if ($Global:WriteHostPadIndent) { $Global:WriteHostPadIndent } else { 0 }),
+    
+        # Number of spaces in each indent. Defaults to the global preference variable WriteHostIndentSize (2).
+        [Int]
+        $IndentSize = $(if ($Global:WriteHostIndentSize) { $Global:WriteHostIndentSize } else { 2 })
+    )
+    begin {
+        function Get-ScopeDepth { 
+            $depth = 0
+            trap { continue } # trap outside the do-while scope
+            do { $null = Get-Variable PID -Scope (++$depth) } while ($?)
+            return $depth - 3
+        }
+       
+        if ($PSBoundParameters.ContainsKey("AutoIndent")) { $null = $PSBoundParameters.Remove("AutoIndent") }
+        if ($PSBoundParameters.ContainsKey("PadIndent")) { $null = $PSBoundParameters.Remove("PadIndent") }
+        if ($PSBoundParameters.ContainsKey("IndentSize")) { $null = $PSBoundParameters.Remove("IndentSize") }
+       
+        $Indent = $PadIndent
+       
+        if ($AutoIndent) { $Indent += (Get-ScopeDepth) * $IndentSize }
+        $Width = $Host.Ui.RawUI.BufferSize.Width - $Indent
+    
+        if ($PSBoundParameters.ContainsKey("Object")) {
+            $OFS = $Separator
+            $PSBoundParameters["Object"] = $(
+                foreach ($line in $Object) {
+                    $line = "$line".Trim("`n").Trim("`r")
+                    for ($start = 0; $start -lt $line.Length; $start += $Width - 1) {
+                        $Count = if ($Width -gt ($Line.Length - $start)) { $Line.Length - $start } else { $Width - 1 }
+                   (" " * $Indent) + $line.SubString($start, $Count).Trim()
+                    }
+                }
+            ) -join ${Separator}
+        }
+       
+        try {
+            $outBuffer = $null
+            if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer)) {
+                $PSBoundParameters['OutBuffer'] = 1
+            }
+            $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Host', [System.Management.Automation.CommandTypes]::Cmdlet)
+            $scriptCmd = { & $wrappedCmd @PSBoundParameters }
+            $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+            $steppablePipeline.Begin($PSCmdlet)
+        }
+        catch {
+            throw
+        }
+    }
+    
+    process {
+        try {
+            $OFS = $Separator
+            $_ = $(
+                foreach ($line in $_) {
+                    $line = "$line".Trim("`n").Trim("`r")
+                    for ($start = 0; $start -lt $line.Length; $start += $Width - 1) {
+                        $Count = if ($Width -gt ($Line.Length - $start)) { $Line.Length - $start } else { $Width - 1 }
+                   (" " * $Indent) + $line.SubString($start, $Count).Trim()
+                    }
+                }
+            ) -join ${Separator}
+            $steppablePipeline.Process($_)
+        }
+        catch {
+            throw
+        }
+    }
+    
+    end {
+        try {
+            $steppablePipeline.End()
+        }
+        catch {
+            throw
+        }
+    }
+} #end function    
+    
+function Write-Verbose {
+    #.Synopsis
+    #  Wraps Write-Verbose with support for indenting based on stack depth. Writes text to the verbose message stream. 
+    #.Description
+    #  This Write-Verbose customizes output. You can indent the text using PadIndent, or indent based on stack depth using AutoIndent or by setting the global variable $WriteHostAutoIndent = $true.
+    #.Example
+    #  $VerbosePreference = "Continue"
+    #  C:\PS>write-verbose "Testing Verbose"
+    #  VERBOSE: Testing Verbose
+    #
+    #  Setting the VerbosePreference causes Write-Verbose output to be displayed in the console
+    #.Example
+    #  C:\PS> write-Verbose (2,4,6,8,10,12) -Separator ", -> "
+    #  VERBOSE: 2, -> 4, -> 6, -> 8, -> 10, -> 12
+    #
+    #  This command displays the even numbers from 2 through 12. The Separator parameter is used to add the string , -> (comma, space, -, >, space).
+    #.Example
+    #  $WriteVerboseAutoIndent = $true
+    #  C:\PS>&{
+    #  >> Write-Verbose "Level 1"
+    #  >> &{ Write-Verbose "Level 2" 
+    #  >> &{ Write-Verbose "Level 3" } 
+    #  >> Write-Verbose "Level 2"
+    #  >> } }
+    #  VERBOSE:   Level 1
+    #  VERBOSE:     Level 2
+    #  VERBOSE:       Level 3
+    #  VERBOSE:     Level 2
+    #
+    #  This command displays how you can set WriteHostAutoIndent to control the output of a series of nested functions that use Write-Verbose for logging...
+    #.Inputs
+    #  System.Object
+    #  You can pipe objects to be written to the verbose message stream. 
+    #.Outputs
+    #  None
+    #  Write-Verbose sends objects to the verbose message stream. It does not return any objects. However, the host might display the objects if the $VerbosePreference
+    [CmdletBinding(HelpUri = 'http://go.microsoft.com/fwlink/?LinkID=113429', RemotingCapability = 'None')]
+    param(
+        # Objects to display in the console.
+        [Parameter(Position = 0, ValueFromPipeline = $true, ValueFromRemainingArguments = $true)]
+        [System.Object[]]
+        ${Message},
+    
+        # String to the output between objects displayed on the console.
+        [System.Object]
+        ${Separator},
+    
+        # If set, Write-Verbose will indent based on the stack depth.  Defaults to the global preference variable $WriteVerboseAutoIndent (False).
+        [Switch]
+        $AutoIndent = $(if ($Global:WriteVerboseAutoIndent) { $Global:WriteVerboseAutoIndent }else { $False }),
+       
+        # Amount to indent (before auto indent).  Defaults to the global preference variable $WriteVerbosePadIndent (0).
+        [Int]
+        $PadIndent = $(if ($Global:WriteVerbosePadIndent) { $Global:WriteVerbosePadIndent }else { 0 }),
+    
+        # Number of spaces in each indent. Defaults to the global preference variable WriteVerboseIndentSize (2).
+        [Int]
+        $IndentSize = $(if ($Global:WriteVerboseIndentSize) { $Global:WriteVerboseIndentSize }else { 2 })
+    )
+    begin {
+        function Get-ScopeDepth { 
+            $depth = 0
+            trap { continue } # trap outside the do-while scope
+            do { $null = Get-Variable PID -Scope (++$depth) } while ($?)
+            return $depth - 3
+        }
+       
+        if ($PSBoundParameters.ContainsKey("AutoIndent")) { $null = $PSBoundParameters.Remove("AutoIndent") }
+        if ($PSBoundParameters.ContainsKey("PadIndent")) { $null = $PSBoundParameters.Remove("PadIndent") }
+        if ($PSBoundParameters.ContainsKey("IndentSize")) { $null = $PSBoundParameters.Remove("IndentSize") }
+        if ($PSBoundParameters.ContainsKey("Separator")) { $null = $PSBoundParameters.Remove("Separator") }
+       
+        $Indent = $PadIndent
+       
+        if ($AutoIndent) { $Indent += (Get-ScopeDepth) * $IndentSize }
+        $Prefix = "VERBOSE: ".Length
+        $Width = $Host.Ui.RawUI.BufferSize.Width - $Indent - $Prefix
+    
+       
+        if ($PSBoundParameters.ContainsKey("Message")) {
+            $OFS = $Separator
+            $PSBoundParameters["Message"] = $(
+                foreach ($line in $Message) {
+                    $line = "$line".Trim("`n").Trim("`r")
+                    for ($start = 0; $start -lt $line.Length; $start += $Width - 1) {
+                        $Count = if ($Width -gt ($Line.Length - $start)) { $Line.Length - $start } else { $Width - 1 }
+                        if ($start) { 
+                      (" " * ($Indent + $Prefix)) + $line.SubString($start, $Count).Trim()
+                        }
+                        else {
+                      (" " * $Indent) + $line.SubString($start, $Count).Trim()
+                        }
+                    }
+                }
+            ) -join "`n"
+        }
+       
+        try {
+            $outBuffer = $null
+            if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer)) {
+                $PSBoundParameters['OutBuffer'] = 1
+            }
+            $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Verbose', [System.Management.Automation.CommandTypes]::Cmdlet)
+            $scriptCmd = { & $wrappedCmd @PSBoundParameters }
+            $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+            $steppablePipeline.Begin($PSCmdlet)
+        }
+        catch {
+            throw
+        }
+    }
+    
+    process {
+        try {
+            $OFS = $Separator
+            $_ = $(
+                foreach ($line in $_) {
+                    $line = "$line".Trim("`n").Trim("`r")
+                    for ($start = 0; $start -lt $line.Length; $start += $Width - 1) {
+                        $Count = if ($Width -gt ($Line.Length - $start)) { $Line.Length - $start } else { $Width - 1 }
+                        if ($start) { 
+                      (" " * ($Indent + $Prefix)) + $line.SubString($start, $Count).Trim()
+                        }
+                        else {
+                      (" " * $Indent) + $line.SubString($start, $Count).Trim()
+                        }
+                   
+                    }
+                }
+            ) -join "`n"
+            $steppablePipeline.Process($_)
+        }
+        catch {
+            throw
+        }
+    }
+    
+    end {
+        try {
+            $steppablePipeline.End()
+        }
+        catch {
+            throw
+        }
+    }
+} #end  function
+#>
+#endregion Proxy Functions
+#endregion Helpers
 #endregion functions
+
+#region Main Logic
 
 # (optional) SQL Developer Bundle (https://www.red-gate.com/account )
 choco install --yes dotnetdeveloperbundle # ANTS Performance Profiler Pro,ANTS Memory Profiler,.NET Reflector VSPro
@@ -218,7 +619,7 @@ choco install --yes urlrewrite
 # Run a separate PowerShell process because the script calls exit, so it will end the current PowerShell session.
 #&powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) <additional install-script args>"
 Log-Action -Title 'IIS hosting bundle' -ForegroundColor Magenta -ScriptBlock { 
-    $dotnetInstallerPath=(Join-Path -Path $env:TEMP -ChildPath 'dotnet-install.ps1')
+    $dotnetInstallerPath = (Join-Path -Path $env:TEMP -ChildPath 'dotnet-install.ps1')
     try {
         #Invoke-WebRequest 'https://dot.net/v1/dotnet-install.ps1' -Proxy $env:HTTP_PROXY -ProxyUseDefaultCredentials -OutFile $dotnetInstallerPath;
         Invoke-WebRequest 'https://dot.net/v1/dotnet-install.ps1' -OutFile $dotnetInstallerPath;
@@ -261,13 +662,13 @@ choco install --yes aspnetmvc4.install
 /PseudoConsoleSupport - Enable experimental support for pseudo consoles. Allows running native console programs like Node or Python in a Git Bash window without using winpty, but it still has known bugs.
 /FSMonitor - Enable experimental built-in file system monitor. Automatically run a built-in file system watcher, to speed up common operations such as git status, git add, git commit, etc in worktrees containing many files.
 #>
-$githubParams=[ordered]@{
-    GitAndUnixToolsOnPath=$null
-    WindowsTerminal=$null
-    WindowsTerminalProfile=$null
-    NoAutoCrlf=$null
-    DefaultBranchName='main'
-    Editor='VisualStudioCode'
+$githubParams = [ordered]@{
+    GitAndUnixToolsOnPath  = $null
+    WindowsTerminal        = $null
+    WindowsTerminalProfile = $null
+    NoAutoCrlf             = $null
+    DefaultBranchName      = 'main'
+    Editor                 = 'VisualStudioCode'
 }
 choco install --yes git --params "'$(($githubParams.Keys|ForEach-Object { "/$($_)$(if ($null -ne $githubParams[$_]) { ":$($githubParams[$_])" })" }) -join ' ')'" 
 
@@ -284,54 +685,96 @@ choco install --yes sharex
 
 # Azure CLI (https://aka.ms/installazurecliwindows )
 choco install --yes azure-cli
-$extensions=@('azure-devops','bicep')
+$extensions = @('azure-devops', 'bicep')
 Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '", "')")')") -ScriptBlock {
-    $azureExtensions=Invoke-CommandInPath -Path (Get-Location) -ScriptBlock ([scriptblock]::Create("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"az extension list-available --output jsonc`""))|ConvertFrom-Json|Select-Object -unique name,summary,version,installed,experimental,preview
-    $azureExtensions=$azureExtensions|Where-Object { $_.name -match ('({0})' -f $extensions -join '|') -and !$_.installed}
+    $componentNamePattern = [regex]::new('(?<name>\b(?:\w+)(?:\-*)(?:\w+)\s*\b)')
+    $versionPattern = '(?<version>\b(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)\b)'
+    $updateAvailablePattern = '((?<updateAvailable>\b((\s+\*+)))|(?<updateAvailable>\b(?:(\s+\*+)?))\b)'
 
-    $azCliInstallCommands = ($azureExtensions, $($extensions|Where-Object{ $_ -notmatch ('({0})' -f $($azureExtensions.name -join '|'))}|ForEach-Object { @{ name=$_; summary=$null; version='0.0.0'; installed=$false; experimental=$false;preview=$false; } }))|Where-Object {!$_.installed}|Select-Object -ExpandProperty name|ForEach-Object {
+    #region get available extensions matching extension list 
+    $functions=''
+    $commands=@(
+        "az extension list-available --output jsonc;"
+    )
+    $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
+    $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+
+    $azureExtensions = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | ConvertFrom-Json | Select-Object -unique name, summary, version, installed, experimental, preview
+    if (($extensions -contains 'bicep')) {
+        $bicepVersion=try {
+            $functions=''
+            $commands=@(
+                "az bicep version;"
+            )
+            $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
+            $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+            $result=Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
+            $result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($versionPattern)" | Select-Object -ExpandProperty version
+        } catch { '0.0.0' }
+
+        if (!($azureExtensions|Where-Object name -match 'bicep')) { $azureExtensions += @{ name="bicep"; summary=$null; version=$bicepVersion; installed=$null -ne $bicep -and $bicepVersion -ne '0.0.0'; experimental=$false; preview=$false; } | Select-Object name, summary, version, installed, experimental, preview }
+    }
+    #endregion get available extensions matching extension list 
+    $azureExtensions = $azureExtensions | Where-Object { $_.name -match ('({0})' -f $($extensions -join '|')) -and !$_.installed }
+
+    #region install missing extensions
+    $azCliInstallCommands = ($($extensions | Where-Object { $_ -match ('({0})' -f $($azureExtensions.name -join '|')) } | ForEach-Object { @{ name = $_; summary = $null; version = '0.0.0'; installed = $false; experimental = $false; preview = $false; } })) | Where-Object { !$_.installed } | Select-Object -ExpandProperty name | ForEach-Object {
         switch ($_) {
             'bicep' { "az $($_) install" }
-            Default { "az extension add --name $($_)"}
+            Default { "az extension add --name $($_)" }
         }
     }
-    Invoke-CommandInPath -Path (Get-Location) -ScriptBlock ([scriptblock]::Create(($azCliInstallCommands -join "`n")))
-
-    $powershellCommand=(@'
-function ConvertFrom-Text {
-<<ConvertFrom-Text>>
-} #end function
-
-<<COMMANDS>>
-'@).Replace('<<ConvertFrom-Text>>', $((Get-Command -Name 'ConvertFrom-Text')).Definition).Replace('<<COMMANDS>>',@'
-(az --version|Where-Object { $_ -match '(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)' })
-'@)
-    $scriptBlock=([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
-    #$result=Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
-    $result=(az --version|Where-Object { $_ -match '(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)' })
-    $componentNamePattern=[regex]::new('(?<name>\b(?:\w+)(?:\-*)(?:\w+)\s*\b)')
-    $versionPattern='(?<version>\b(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)\b)'
-    $updateAvailablePattern='((?<updateAvailable>\b((\s+\*+)))|(?<updateAvailable>\b(?:(\s+\*+)?))\b)'
-    $updatesAvailable=($result|ConvertFrom-Text -Pattern "$($componentNamePattern)$($versionPattern)$($updateAvailablePattern)"|Where-Object{ ![string]::IsNullOrWhiteSpace($_.updateAvailable) })
-    $doCliUpgrade=($updatesAvailable.Count -gt 0)
-    if ($doCliUpgrade) {
-        $updatesAvailable
-        Invoke-CommandInPath -Path (Get-Location) -ScriptBlock { (az upgrade) <# --all true #> }
+    $azCliInstall=[scriptblock]::Create(($azCliInstallCommands -join "`n"))
+    if ($azCliInstall) {
+#         $functions = 
+#         @'
+# function ConvertFrom-Text {
+# <<DEFINITION>>
+# } #end function
+# '@.Replace('<<DEFINITION>>', $((Get-Command -Name 'ConvertFrom-Text')).Definition)
+        $functions=''
+        $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $azCliInstall).Trim()
+        $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+        $result=Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
     }
-}
+    #endregion install missing extensions
 
-#az upgrade
+    #region upgrade az
+    $functions=''
+    $commands=@(
+        @'
+az --version;
+'@
+    )
+    $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
+    $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+    $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | Where-Object { $_ -match '(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)' }
+
+    $doCliUpgrade=(($updatesAvailable = ($result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($componentNamePattern)$($versionPattern)$($updateAvailablePattern)" | Where-Object { ![string]::IsNullOrWhiteSpace($_.updateAvailable) })).Count -gt 0)
+    if ($doCliUpgrade) {
+        Log-Action -Title 'The following Az Updates are afailable, and will be updated' -NoHeader -ScriptBlock { $updatesAvailable|ForEach-Object { "   $($_.name), v$($_.version)" } }
+
+        $functions=''
+        $commands=@(
+            'az upgrade --yes;'
+        )
+        $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
+        $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+        $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
+    }
+    #endregion upgrade az
+}
 
 # Azure Artifacts Credential Provider (https://github.com/microsoft/artifacts-credprovider#setup )
 Log-Action -Title 'Azure Artifacts Credential' -ForegroundColor Magenta -ScriptBlock { Invoke-Expression "& { $(Invoke-RestMethod https://aka.ms/install-artifacts-credprovider.ps1) } -AddNetfx" }
 
 # Clone Evolve Repos
-$organisation='FrFl-Development'
-$project='Evolve'
+$organisation = 'FrFl-Development'
+$project = 'Evolve'
 
 Log-Action -Title 'Clone Repos' -ForegroundColor Magenta -ScriptBlock { 
-    $developmentPaths = @{RepositoryRoot='C:\data\tfs\git';SQLRoot='C:\data\sql';}
-    $developmentPaths.Keys|ForEach-Object { 
+    $developmentPaths = @{RepositoryRoot = 'C:\data\tfs\git'; SQLRoot = 'C:\data\sql'; }
+    $developmentPaths.Keys | ForEach-Object { 
         if (!(Test-Path -Path $developmentPaths[$_])) {
             Write-Host -Object ("Creating folder '$($developmentPaths[$_])'")
             New-Item -ItemType Directory -Path $developmentPaths[$_] -Force -ErrorAction SilentlyContinue
@@ -347,11 +790,11 @@ Log-Action -Title 'Clone Repos' -ForegroundColor Magenta -ScriptBlock {
     $utilityPath = (Join-Path -Path (Join-Path -Path $developmentPaths['RepositoryRoot'] -ChildPath $repositoryName) -ChildPath 'Utility' -Resolve)
     $repositoryNames = @(
         # Core
-         'EditorConfig'
-        ,'Evolve'
-        ,'FRFL'
+        'EditorConfig'
+        , 'Evolve'
+        , 'FRFL'
         # Optional
-        ,'TfsBuildExtensions'
+        , 'TfsBuildExtensions'
         # ,'Assist'
         # ,'Callisto'
         # ,'CallRouting'
@@ -368,7 +811,13 @@ Log-Action -Title 'Clone Repos' -ForegroundColor Magenta -ScriptBlock {
     ) | ForEach-Object {
         $repositoryName = $_
         Log-Action -Title "Cloning $($repositoryName)" -ScriptBlock { 
-            $scriptBlock = [scriptblock]::Create("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"$($utilityPath)\CloneAllRepos.ps1 -RepositoryNameStartsWith '$($repositoryName)'`"")
+            $functions=''
+            $commands=@(
+                "$($utilityPath)\CloneAllRepos.ps1 -RepositoryNameStartsWith '$($repositoryName)';"
+            )
+            $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
+            #$scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+            $scriptBlock = ([scriptblock]::Create(("{0}" -f $powershellCommand)))
             Invoke-CommandInPath -Path $utilityPath -ScriptBlock $scriptBlock
         }
     }
@@ -434,3 +883,26 @@ Run "npm run build-prod" to build the angular portion of the site (this may take
 In a admin command prompt execute C:\Data\TFS\Git\Evolve\Scripts\DevEnvConfig>DevEnvMigration.bat
 Go to l-web  and you're done
 #>
+
+Log-Action -Title "Set Up SymbolicLinks to folders" -NoHeader -ScriptBlock {
+    $symbolicLink = @{
+        SymbolicLink       = [string]$null
+        SymbolicLinkTarget = [string]$null
+        Backup             = [switch]$false
+    }
+    Log-Action -Title '- Editor Config' -NoHeader -ScriptBlock {
+        $symbolicLink.SymbolicLink = "C:\Data\TFS\Git\.editorconfig";
+        $symbolicLink.SymbolicLinkTarget = "C:\data\tfs\git\EditorConfig\.editorconfig";
+        $symbolicLink.Backup = $false
+        Create-SymbolicLink -SymbolicLinks $symbolicLink
+        Log-Action -Title '- Nested' -NoHeader -ScriptBlock {
+            Log-Action -Title '- Nested' -NoHeader -ScriptBlock {
+            
+            }
+        }
+    }
+}
+
+exit 0
+
+#endregion Main Logic
