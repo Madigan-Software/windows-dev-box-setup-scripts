@@ -790,11 +790,11 @@ Log-Action -Title 'Clone Repos' -ForegroundColor Magenta -ScriptBlock {
     $utilityPath = (Join-Path -Path (Join-Path -Path $developmentPaths['RepositoryRoot'] -ChildPath $repositoryName) -ChildPath 'Utility' -Resolve)
     $repositoryNames = @(
         # Core
-        'EditorConfig'
+         'EditorConfig'
         ,'Evolve'
         ,'FRFL'
         # Optional
-        # ,'TfsBuildExtensions'
+        ,'TfsBuildExtensions'
         # ,'Assist'
         # ,'Callisto'
         # ,'CallRouting'
