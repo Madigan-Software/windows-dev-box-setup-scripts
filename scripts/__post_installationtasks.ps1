@@ -198,7 +198,7 @@ function Get-Execution {
             $Output | Add-Member -MemberType NoteProperty -Name ScriptLocation -Value $((Split-Path $_.ScriptName)[0]) -PassThru
         }
         else {
-            $Output = $CallStack[($CallStack.Count – 1)]
+            $Output = $CallStack[($CallStack.Count -1)]
             $Output | Add-Member -MemberType NoteProperty -Name ScriptLocation -Value $((Split-Path $Output.ScriptName)[0]) -PassThru
         }
     }
@@ -216,7 +216,7 @@ function Get-IndentationLevel {
          ($CallStack.Location -ne '<No file>') -and
          ($CallStack.ScriptName -ne $Null))
     ) {
-        $level = $CallStack.Count – 1
+        $level = $CallStack.Count -1
     }
     else {
         Write-Error -Message 'No callstack detected' -Category 'InvalidData'
