@@ -246,6 +246,62 @@ function Invoke-CommandInPath {
     }
 } #end function
 
+function Invoke-VSIXInstaller {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)][string]$PackageName,
+        [Parameter(Mandatory)][string]$VsixFileName,
+        [Parameter(Mandatory)][string]$VsixUrl,
+        [Parameter(Mandatory)][string]$Checksum
+    )
+    
+    begin {
+        #Install-ChocolateyVsixPackage currently broke it cannot determine the installed locarion of the VSIXInstaller.exe
+        #if (!(Get-Module -Name Choco*)) { Import-Module $env:ChocolateyInstall\helpers\chocolateyInstaller.psm1 }
+
+        $installer='C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\VSIXInstaller.exe'
+    }
+    process {}
+    end {
+        try {
+            #Install-ChocolateyVsixPackage currently broke it cannot determine the installed locarion of the VSIXInstaller.exe
+            #Install-ChocolateyVsixPackage -packageName $PackageName -vsixUrl $VsixUrl -vsVersion 17 -checksum $Checksum 
+            $vsixPath = "$($env:USERPROFILE)\$($vsixFileName)"
+    
+            (New-Object Net.WebClient).DownloadFile($VsixUrl, $vsixPath)
+            if (($downloadFileHash=(Get-FileHash -Path $vsixPath -Algorithm MD5).Hash) -eq $Checksum) {
+                try {
+                    Write-Host "Installing $($PackageName) ($($vsixPath)) using $($installer)"
+                    $psi = New-Object System.Diagnostics.ProcessStartInfo
+                    $psi.FileName = $installer
+                    $psi.Arguments = "/q $vsixPath" # /admin /prerequisitesRequired
+                    $s = [System.Diagnostics.Process]::Start($psi)
+                    $s.WaitForExit()
+        
+                    if ($s.ExitCode -gt 0) {
+                        switch ($s.ExitCode) {
+                            1001 { Write-Warning -Message "$($PackageName) is already installed" }
+                            Default { throw "There was an error installing '$($PackageName)'. The exit code returned was $($s.ExitCode)." }
+                        }
+                    }
+                }
+                catch {
+                    if ($? -or $LASTEXITCODE -ne 0) {
+                        throw "Failed to install WSIX for VS2022 extension"
+                    }
+                    throw
+                }
+    
+            } else {
+                throw "Checksum for $($PackageName) ($($downloadFileHash) != $($Checksum))"
+            }
+        }
+        finally {
+            Remove-Item $vsixPath -Force -ErrorAction SilentlyContinue
+        }    
+    }
+}
+
 function Log-Action {
     [CmdletBinding()]
     param (
@@ -606,14 +662,57 @@ function Write-Verbose {
 #endregion Helpers
 #endregion functions
 
+Log-Action -Title 'Nuget Config' -ScriptBlock {
+    "
+    In Tools->Nuget Package Manager->Package Manager Settings
+    General -> Change the Default package management format to PackageReference
+    Package Sources -> Add a source 'Evolve' directed to https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json 
+    Package Sources -> Add a source 'DevExpress' directed to the DevExpress NuGet feed URL from https://www.devexpress.com/ClientCenter/DownloadManager/  once you are logged into your DevExpress account
+    "
+    $nugetSources=@{
+        'nuget.org'=@{ Source='https://api.nuget.org/v3/index.json'; Enabled=$true; };
+        'Evolve'=@{ Source='https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json'; Enabled=$true; };
+        'DevExpress'=@{ Source='https://nuget.devexpress.com/pgT3XVjzfXNfzy4wfgmmXQW45CFMkkuoMnb2wHWC1OYcu28quH/api'; Enabled=$true; }
+    }
+    $nugetList=@()
+    $nugetList+=(dotnet nuget list source --format Detailed) -match ('^.*[0-9]* *({0}) .Enabled.$' -f ($nugetSources.Keys -join '|'))
+    $sequencePattern = '(?<sequence>(?:(\d+)\.))'
+    $namePattern = '(?<name>\b(?:(\w+)\.)?(?:(\w+)\.)?(?:(\w+)\.\w+)\b)'
+    $statusPattern = '\[(?<status>\b(?:(\w+))\b)\]'
+
+    $nugeetListObject=($nugetlist|ConvertFrom-Text -Pattern "\s*$($sequencePattern)\s*$($namePattern)\s*$($statusPattern)`$")
+    $nugeetListObject
+    $nugetSources|ForEach-Object { 
+        $_.Key -notmatch ("($($nugeetListObject.name -join '|'))")
+    }
+    <#
+    if (($nugetList | Where-Object {$_}) -and $nugetList.Count -lt ($nugetSources.Count +1)) {
+        #$nugetSources.Keys|ForEach-Object { dotnet nuget remove source "$($_)" }
+        $nugetList|foreach-object {
+            
+        }
+        dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
+        #dotnet nuget add source 'C:\Program Files (x86)\Microsoft SDKs\NuGetPackages\' -name 'Microsoft Visual Studio Offline Packages' 
+        #dotnet nuget add source \\prd-tfs-bld01\Packages\Nuget --name Evolve.old
+        #dotnet nuget add disable source -name Evolve.old
+        dotnet nuget add source https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json --name Evolve
+        dotnet nuget add source https://nuget.devexpress.com/pgT3XVjzfXNfzy4wfgmmXQW45CFMkkuoMnb2wHWC1OYcu28quH/api --name DevExpress
+        #dotnet nuget add source 'C:\Program Files (x86)\Devexpress 20.1\Components\System\Components\Packages' --name 'Devexpress 20.1 Local'
+        #dotnet nuget add disable source --name 'Devexpress 20.1 Local'
+    }
+    #>
+}
+
+exit 1
+
 #region Main Logic
 
 # (optional) SQL Developer Bundle (https://www.red-gate.com/account )
-choco install --yes dotnetdeveloperbundle # ANTS Performance Profiler Pro,ANTS Memory Profiler,.NET Reflector VSPro
-choco install --yes sqltoolbelt --params "/products:'SQL Compare, SQL Data Compare, SQL Prompt, SQL Search, SQL Data Generator, SSMS Integration Pack '"
+choco install --yes dotnetdeveloperbundle --limit-output # ANTS Performance Profiler Pro,ANTS Memory Profiler,.NET Reflector VSPro
+choco install --yes sqltoolbelt --limit-output --params "/products:'SQL Compare, SQL Data Compare, SQL Prompt, SQL Search, SQL Data Generator, SSMS Integration Pack '"
 
 # UrlRewrite (https://www.iis.net/downloads/microsoft/url-rewrite )
-choco install --yes urlrewrite
+choco install --yes urlrewrite --limit-output
 
 # IIS hosting bundle for .net (https://www.microsoft.com/net/permalink/dotnetcore-current-windows-runtime-bundle-installer )
 # Run a separate PowerShell process because the script calls exit, so it will end the current PowerShell session.
@@ -633,13 +732,29 @@ Log-Action -Title 'IIS hosting bundle' -ForegroundColor Magenta -ScriptBlock {
 }
 
 # WIX (https://github.com/wixtoolset/wix3/releases/tag/wix3111rtm )
-choco install --yes wixtoolset
-#choco install --yes wix35
-# WIX Extension(https://marketplace.visualstudio.com/items?itemName=WixToolset.WixToolsetVisualStudio2022Extension )
-#  https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2022extension/1.0.0.22/1668223914320/Votive2022.vsix
+choco install --yes wixtoolset --limit-output
+#choco install --yes wix35 --limit-output
+
+Log-Action -Title 'WIX Extension' -NoHeader -ForegroundColor Magenta -ScriptBlock {
+    # WIX Extension(https://marketplace.visualstudio.com/items?itemName=WixToolset.WixToolsetVisualStudio2022Extension )
+    #   Install-ChocolateyVsixPackage -packageName "wixtoolsetvisualstudio2019extension" -vsixUrl "https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2019extension/1.0.0.18/1640535816037/Votive2019.vsix" -vsVersion 17.1.0
+    #  https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2022extension/1.0.0.22/1668223914320/Votive2022.vsix
+    
+    $vsixFileName="Votive2022.vsix"
+    $checksumMD5='1AC0C61B7FB1D88C2193CFB8E8E38519' # $checkSumSha256="C8B3E77EF18B8F5190B4B9BB6BA6996CB528B8F2D6BC34B373BB2242D71F3F43"
+    $params=@{
+        PackageName="wixtoolsetvisualstudio2022extension"
+        VsixFileName="$($vsixFileName)";
+        VsixUrl="https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2022extension/1.0.0.22/1668223914320/$($vsixFileName)";
+        Checksum=$checksumMD5;
+    }
+
+    Invoke-VSIXInstaller @params
+}
+
 
 # MVC 4 (https://www.microsoft.com/en-gb/download/details.aspx?id=30683 )
-choco install --yes aspnetmvc4.install
+choco install --yes aspnetmvc4.install --limit-output
 
 <#
 # GIT (https://git-scm.com/download/win )
@@ -670,21 +785,21 @@ $githubParams = [ordered]@{
     DefaultBranchName      = 'main'
     Editor                 = 'VisualStudioCode'
 }
-choco install --yes git --params "'$(($githubParams.Keys|ForEach-Object { "/$($_)$(if ($null -ne $githubParams[$_]) { ":$($githubParams[$_])" })" }) -join ' ')'" 
+choco install --yes git --limit-output --params "'$(($githubParams.Keys|ForEach-Object { "/$($_)$(if ($null -ne $githubParams[$_]) { ":$($githubParams[$_])" })" }) -join ' ')'" 
 
 # Node (https://nodejs.org/en )
-#choco install --yes nodejs
-choco install --yes nodejs-lts
+#choco install --yes nodejs --limit-output
+choco install --yes nodejs-lts --limit-output
 
 # Postman (https://www.postman.com/downloads )
-choco install --yes postman
-#choco install --yes postman-cli
+choco install --yes postman --limit-output
+#choco install --yes postman-cli --limit-output
 
 # (optional screen capture tool) Share X (https://getsharex.com )
-choco install --yes sharex
+choco install --yes sharex --limit-output
 
 # Azure CLI (https://aka.ms/installazurecliwindows )
-choco install --yes azure-cli
+choco install --yes azure-cli --limit-output
 $extensions = @('azure-devops', 'bicep')
 Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '", "')")')") -ScriptBlock {
     $componentNamePattern = [regex]::new('(?<name>\b(?:\w+)(?:\-*)(?:\w+)\s*\b)')
@@ -830,13 +945,34 @@ Log-Action -Title 'Visual Studio Configuration' -ForegroundColor Green -ScriptBl
     "
 }
 
-Log-Action -Title 'Nuget Config' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'Nuget Config' -ScriptBlock {
     "
     In Tools->Nuget Package Manager->Package Manager Settings
     General -> Change the Default package management format to PackageReference
     Package Sources -> Add a source 'Evolve' directed to https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json 
     Package Sources -> Add a source 'DevExpress' directed to the DevExpress NuGet feed URL from https://www.devexpress.com/ClientCenter/DownloadManager/  once you are logged into your DevExpress account
     "
+    $nugetSources=@{
+        'nuget.org'=@{ Source='https://api.nuget.org/v3/index.json'; Enabled=$true; };
+        'Evolve'=@{ Source='https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json'; Enabled=$true; };
+        'DevExpress'=@{ Source='https://nuget.devexpress.com/pgT3XVjzfXNfzy4wfgmmXQW45CFMkkuoMnb2wHWC1OYcu28quH/api'; Enabled=$true; }
+    }
+    $nugetList=@()
+    $nugetList+=(dotnet nuget list source --format Detailed) -match ('^.*[0-9]* *({0}) .Enabled.$' -f ($nugetSources.Keys -join '|'))
+    if (($nugetList | Where-Object {$_}) -and $nugetList.Count -lt ($nugetSources.Count +1)) {
+        #$nugetSources.Keys|ForEach-Object { dotnet nuget remove source "$($_)" }
+        $nugetList|foreach-object {
+
+        }
+        dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
+        #dotnet nuget add source 'C:\Program Files (x86)\Microsoft SDKs\NuGetPackages\' -name 'Microsoft Visual Studio Offline Packages' 
+        #dotnet nuget add source \\prd-tfs-bld01\Packages\Nuget --name Evolve.old
+        #dotnet nuget add disable source -name Evolve.old
+        dotnet nuget add source https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json --name Evolve
+        dotnet nuget add source https://nuget.devexpress.com/pgT3XVjzfXNfzy4wfgmmXQW45CFMkkuoMnb2wHWC1OYcu28quH/api --name DevExpress
+        #dotnet nuget add source 'C:\Program Files (x86)\Devexpress 20.1\Components\System\Components\Packages' --name 'Devexpress 20.1 Local'
+        #dotnet nuget add disable source --name 'Devexpress 20.1 Local'
+    }
 }
 
 Log-Action -Title 'Password Manager' -ForegroundColor Green -ScriptBlock {
@@ -919,6 +1055,11 @@ Log-Action -Title 'Website setup' -ForegroundColor Green -ScriptBlock {
     In a admin command prompt execute C:\Data\TFS\Git\Evolve\Scripts\DevEnvConfig>DevEnvMigration.bat
     Go to l-web  and you're done
     "
+}
+
+Log-Action -Title "Update Outdated packages" -ScriptBlock {
+    $outdated=choco outdated --limit-output|Select-Object @{E={ $_.Split('|')|Select-Object -First 1 };N="Id"},@{E={ $_.Split('|')|Select-Object -Skip 1 -First 1 };N="CurrentVersion"},@{E={ $_.Split('|')|Select-Object -Skip 2 -First 1 };N="NewVersion"},@{E={ $_.Split('|')|Select-Object -Skip 3 -First 1 };N="Pinned"}
+    $outdated|Where-Object {!("$($_.Pinned)" -as [bool]) }|ForEach-Object { choco upgrade --yes $_.Id --limit-output }
 }
 
 Log-Action -Title "Set Up SymbolicLinks to folders" -NoHeader -ScriptBlock {
