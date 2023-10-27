@@ -6,7 +6,7 @@ if ($Host.Name -ne 'Visual Studio Code Host') {
     _chocolatey-InstallOrUpdate -PackageId vscode
     _chocolatey-InstallOrUpdate -PackageId vscode-insiders
 }
-$githubParams=[ordered]@{
+$gitParams=[ordered]@{
     GitAndUnixToolsOnPath=$null
     WindowsTerminal=$null
     WindowsTerminalProfile=$null
@@ -14,6 +14,6 @@ $githubParams=[ordered]@{
     DefaultBranchName='main'
     Editor='VisualStudioCode'
 }
-_chocolatey-InstallOrUpdate -PackageId git -PackageParameters "'$(($githubParams.Keys|ForEach-Object { "/$($_)$(if ($null -ne $githubParams[$_]) { ":$($githubParams[$_])" })" }) -join ' ')'" 
+_chocolatey-InstallOrUpdate -PackageId git -PackageParameters "'$(($gitParams.Keys|ForEach-Object { "/$($_)$(if ($null -ne $gitParams[$_]) { ":$($gitParams[$_])" })" }) -join ' ')'" 
 _chocolatey-InstallOrUpdate -PackageId 7zip.install
 _chocolatey-InstallOrUpdate -PackageId sysinternals

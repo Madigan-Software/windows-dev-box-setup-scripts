@@ -164,7 +164,7 @@ try {
     if (!($result -and $($result.SideIndicator|Where-Object { $_ -match '^(\=\>|\<\=)$' }))) {
         _logMessage -Message "$($PackageId): $(if ($null -ne $onLinePackageList.Version) { "Already installed" } else { "Does not exist please check chocolatey https://community.chocolatey.org/packages?q=id%3A$($PackageId)" })" -ForegroundColor Yellow
     } else {
-        choco install -y $PackageId --package-parameters="'--add Microsoft.VisualStudio.Component.Git' '--add Microsoft.Net.Component.4.7.1.TargetingPack' '-add Microsoft.Net.Component.4.7.1.SDK'"
+        choco install -y $PackageId --package-parameters="'--add Microsoft.VisualStudio.Component.Git' '--add Microsoft.Net.Component.4.7.2.TargetingPack' '-add Microsoft.Net.Component.4.7.2.SDK' '--add Microsoft.Net.Component.4.7.1.TargetingPack' '-add Microsoft.Net.Component.4.7.1.SDK'"
     }
 
     Update-SessionEnvironment #refreshing env due to Git install

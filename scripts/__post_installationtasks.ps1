@@ -1,5 +1,8 @@
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
 
+$script:vs2022RootPath = 'C:\Program Files\Microsoft Visual Studio\2022\Professional'
+$script:vs2022ExePath = "$($vs2022RootPath)\Common7\IDE\devenv.exe"
+
 #region functions
 #region helpers
 
@@ -181,7 +184,7 @@ function Create-SymbolicLink {
                 Write-Verbose -Message ($result | Out-String -Width 4095) -Verbose
             }
         }
-}
+    }
     end { }
 } #end function
 
@@ -198,7 +201,7 @@ function Get-Execution {
             $Output | Add-Member -MemberType NoteProperty -Name ScriptLocation -Value $((Split-Path $_.ScriptName)[0]) -PassThru
         }
         else {
-            $Output = $CallStack[($CallStack.Count -1)]
+            $Output = $CallStack[($CallStack.Count - 1)]
             $Output | Add-Member -MemberType NoteProperty -Name ScriptLocation -Value $((Split-Path $Output.ScriptName)[0]) -PassThru
         }
     }
@@ -216,7 +219,7 @@ function Get-IndentationLevel {
          ($CallStack.Location -ne '<No file>') -and
          ($CallStack.ScriptName -ne $Null))
     ) {
-        $level = $CallStack.Count -1
+        $level = $CallStack.Count - 1
     }
     else {
         Write-Error -Message 'No callstack detected' -Category 'InvalidData'
@@ -259,7 +262,7 @@ function Invoke-VSIXInstaller {
         #Install-ChocolateyVsixPackage currently broke it cannot determine the installed locarion of the VSIXInstaller.exe
         #if (!(Get-Module -Name Choco*)) { Import-Module $env:ChocolateyInstall\helpers\chocolateyInstaller.psm1 }
 
-        $installer='C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\VSIXInstaller.exe'
+        $installer = "$($script:vs2022RootPath)\Common7\IDE\VSIXInstaller.exe"
     }
     process {}
     end {
@@ -269,7 +272,7 @@ function Invoke-VSIXInstaller {
             $vsixPath = "$($env:USERPROFILE)\$($vsixFileName)"
     
             (New-Object Net.WebClient).DownloadFile($VsixUrl, $vsixPath)
-            if (($downloadFileHash=(Get-FileHash -Path $vsixPath -Algorithm MD5).Hash) -eq $Checksum) {
+            if (($downloadFileHash = (Get-FileHash -Path $vsixPath -Algorithm MD5).Hash) -eq $Checksum) {
                 try {
                     Write-Host "Installing $($PackageName) ($($vsixPath)) using $($installer)"
                     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -292,7 +295,8 @@ function Invoke-VSIXInstaller {
                     throw
                 }
     
-            } else {
+            }
+            else {
                 throw "Checksum for $($PackageName) ($($downloadFileHash) != $($Checksum))"
             }
         }
@@ -662,49 +666,6 @@ function Write-Verbose {
 #endregion Helpers
 #endregion functions
 
-Log-Action -Title 'Nuget Config' -ScriptBlock {
-    "
-    In Tools->Nuget Package Manager->Package Manager Settings
-    General -> Change the Default package management format to PackageReference
-    Package Sources -> Add a source 'Evolve' directed to https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json 
-    Package Sources -> Add a source 'DevExpress' directed to the DevExpress NuGet feed URL from https://www.devexpress.com/ClientCenter/DownloadManager/  once you are logged into your DevExpress account
-    "
-    $nugetSources=@{
-        'nuget.org'=@{ Source='https://api.nuget.org/v3/index.json'; Enabled=$true; };
-        'Evolve'=@{ Source='https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json'; Enabled=$true; };
-        'DevExpress'=@{ Source='https://nuget.devexpress.com/pgT3XVjzfXNfzy4wfgmmXQW45CFMkkuoMnb2wHWC1OYcu28quH/api'; Enabled=$true; }
-    }
-    $nugetList=@()
-    $nugetList+=(dotnet nuget list source --format Detailed) -match ('^.*[0-9]* *({0}) .Enabled.$' -f ($nugetSources.Keys -join '|'))
-    $sequencePattern = '(?<sequence>(?:(\d+)\.))'
-    $namePattern = '(?<name>\b(?:(\w+)\.)?(?:(\w+)\.)?(?:(\w+)\.\w+)\b)'
-    $statusPattern = '\[(?<status>\b(?:(\w+))\b)\]'
-
-    $nugeetListObject=($nugetlist|ConvertFrom-Text -Pattern "\s*$($sequencePattern)\s*$($namePattern)\s*$($statusPattern)`$")
-    $nugeetListObject
-    $nugetSources|ForEach-Object { 
-        $_.Key -notmatch ("($($nugeetListObject.name -join '|'))")
-    }
-    <#
-    if (($nugetList | Where-Object {$_}) -and $nugetList.Count -lt ($nugetSources.Count +1)) {
-        #$nugetSources.Keys|ForEach-Object { dotnet nuget remove source "$($_)" }
-        $nugetList|foreach-object {
-            
-        }
-        dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
-        #dotnet nuget add source 'C:\Program Files (x86)\Microsoft SDKs\NuGetPackages\' -name 'Microsoft Visual Studio Offline Packages' 
-        #dotnet nuget add source \\prd-tfs-bld01\Packages\Nuget --name Evolve.old
-        #dotnet nuget add disable source -name Evolve.old
-        dotnet nuget add source https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json --name Evolve
-        dotnet nuget add source https://nuget.devexpress.com/pgT3XVjzfXNfzy4wfgmmXQW45CFMkkuoMnb2wHWC1OYcu28quH/api --name DevExpress
-        #dotnet nuget add source 'C:\Program Files (x86)\Devexpress 20.1\Components\System\Components\Packages' --name 'Devexpress 20.1 Local'
-        #dotnet nuget add disable source --name 'Devexpress 20.1 Local'
-    }
-    #>
-}
-
-exit 1
-
 #region Main Logic
 
 # (optional) SQL Developer Bundle (https://www.red-gate.com/account )
@@ -740,13 +701,13 @@ Log-Action -Title 'WIX Extension' -NoHeader -ForegroundColor Magenta -ScriptBloc
     #   Install-ChocolateyVsixPackage -packageName "wixtoolsetvisualstudio2019extension" -vsixUrl "https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2019extension/1.0.0.18/1640535816037/Votive2019.vsix" -vsVersion 17.1.0
     #  https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2022extension/1.0.0.22/1668223914320/Votive2022.vsix
     
-    $vsixFileName="Votive2022.vsix"
-    $checksumMD5='1AC0C61B7FB1D88C2193CFB8E8E38519' # $checkSumSha256="C8B3E77EF18B8F5190B4B9BB6BA6996CB528B8F2D6BC34B373BB2242D71F3F43"
-    $params=@{
-        PackageName="wixtoolsetvisualstudio2022extension"
-        VsixFileName="$($vsixFileName)";
-        VsixUrl="https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2022extension/1.0.0.22/1668223914320/$($vsixFileName)";
-        Checksum=$checksumMD5;
+    $vsixFileName = "Votive2022.vsix"
+    $checksumMD5 = '1AC0C61B7FB1D88C2193CFB8E8E38519' # $checkSumSha256="C8B3E77EF18B8F5190B4B9BB6BA6996CB528B8F2D6BC34B373BB2242D71F3F43"
+    $params = @{
+        PackageName  = "wixtoolsetvisualstudio2022extension"
+        VsixFileName = "$($vsixFileName)";
+        VsixUrl      = "https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2022extension/1.0.0.22/1668223914320/$($vsixFileName)";
+        Checksum     = $checksumMD5;
     }
 
     Invoke-VSIXInstaller @params
@@ -777,7 +738,7 @@ choco install --yes aspnetmvc4.install --limit-output
 /PseudoConsoleSupport - Enable experimental support for pseudo consoles. Allows running native console programs like Node or Python in a Git Bash window without using winpty, but it still has known bugs.
 /FSMonitor - Enable experimental built-in file system monitor. Automatically run a built-in file system watcher, to speed up common operations such as git status, git add, git commit, etc in worktrees containing many files.
 #>
-$githubParams = [ordered]@{
+$gitParams = [ordered]@{
     GitAndUnixToolsOnPath  = $null
     WindowsTerminal        = $null
     WindowsTerminalProfile = $null
@@ -785,7 +746,7 @@ $githubParams = [ordered]@{
     DefaultBranchName      = 'main'
     Editor                 = 'VisualStudioCode'
 }
-choco install --yes git --limit-output --params "'$(($githubParams.Keys|ForEach-Object { "/$($_)$(if ($null -ne $githubParams[$_]) { ":$($githubParams[$_])" })" }) -join ' ')'" 
+choco install --yes git --limit-output --params "'$(($gitParams.Keys|ForEach-Object { "/$($_)$(if ($null -ne $gitParams[$_]) { ":$($gitParams[$_])" })" }) -join ' ')'" 
 
 # Node (https://nodejs.org/en )
 #choco install --yes nodejs --limit-output
@@ -807,8 +768,8 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
     $updateAvailablePattern = '((?<updateAvailable>\b((\s+\*+)))|(?<updateAvailable>\b(?:(\s+\*+)?))\b)'
 
     #region get available extensions matching extension list 
-    $functions=''
-    $commands=@(
+    $functions = ''
+    $commands = @(
         "az extension list-available --output jsonc;"
     )
     $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
@@ -816,18 +777,19 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
 
     $azureExtensions = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | ConvertFrom-Json | Select-Object -unique name, summary, version, installed, experimental, preview
     if (($extensions -contains 'bicep')) {
-        $bicepVersion=try {
-            $functions=''
-            $commands=@(
+        $bicepVersion = try {
+            $functions = ''
+            $commands = @(
                 "az bicep version;"
             )
             $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
             $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
-            $result=Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
+            $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
             $result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($versionPattern)" | Select-Object -ExpandProperty version
-        } catch { '0.0.0' }
+        }
+        catch { '0.0.0' }
 
-        if (!($azureExtensions|Where-Object name -match 'bicep')) { $azureExtensions += @{ name="bicep"; summary=$null; version=$bicepVersion; installed=$null -ne $bicep -and $bicepVersion -ne '0.0.0'; experimental=$false; preview=$false; } | Select-Object name, summary, version, installed, experimental, preview }
+        if (!($azureExtensions | Where-Object name -match 'bicep')) { $azureExtensions += @{ name = "bicep"; summary = $null; version = $bicepVersion; installed = $null -ne $bicep -and $bicepVersion -ne '0.0.0'; experimental = $false; preview = $false; } | Select-Object name, summary, version, installed, experimental, preview }
     }
     #endregion get available extensions matching extension list 
     $azureExtensions = $azureExtensions | Where-Object { $_.name -match ('({0})' -f $($extensions -join '|')) -and !$_.installed }
@@ -839,24 +801,24 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
             Default { "az extension add --name $($_)" }
         }
     }
-    $azCliInstall=[scriptblock]::Create(($azCliInstallCommands -join "`n"))
+    $azCliInstall = [scriptblock]::Create(($azCliInstallCommands -join "`n"))
     if ($azCliInstall) {
-#         $functions = 
-#         @'
-# function ConvertFrom-Text {
-# <<DEFINITION>>
-# } #end function
-# '@.Replace('<<DEFINITION>>', $((Get-Command -Name 'ConvertFrom-Text')).Definition)
-        $functions=''
+        #         $functions = 
+        #         @'
+        # function ConvertFrom-Text {
+        # <<DEFINITION>>
+        # } #end function
+        # '@.Replace('<<DEFINITION>>', $((Get-Command -Name 'ConvertFrom-Text')).Definition)
+        $functions = ''
         $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $azCliInstall).Trim()
         $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
-        $result=Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
+        $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
     }
     #endregion install missing extensions
 
     #region upgrade az
-    $functions=''
-    $commands=@(
+    $functions = ''
+    $commands = @(
         @'
 az --version;
 '@
@@ -865,12 +827,12 @@ az --version;
     $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
     $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | Where-Object { $_ -match '(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)' }
 
-    $doCliUpgrade=(($updatesAvailable = ($result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($componentNamePattern)$($versionPattern)$($updateAvailablePattern)" | Where-Object { ![string]::IsNullOrWhiteSpace($_.updateAvailable) })).Count -gt 0)
+    $doCliUpgrade = (($updatesAvailable = ($result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($componentNamePattern)$($versionPattern)$($updateAvailablePattern)" | Where-Object { ![string]::IsNullOrWhiteSpace($_.updateAvailable) })).Count -gt 0)
     if ($doCliUpgrade) {
-        Log-Action -Title 'The following Az Updates are afailable, and will be updated' -NoHeader -ScriptBlock { $updatesAvailable|ForEach-Object { "   $($_.name), v$($_.version)" } }
+        Log-Action -Title 'The following Az Updates are afailable, and will be updated' -NoHeader -ScriptBlock { $updatesAvailable | ForEach-Object { "   $($_.name), v$($_.version)" } }
 
-        $functions=''
-        $commands=@(
+        $functions = ''
+        $commands = @(
             'az upgrade --yes;'
         )
         $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
@@ -887,7 +849,7 @@ Log-Action -Title 'Azure Artifacts Credential' -ForegroundColor Magenta -ScriptB
 $organisation = 'FrFl-Development'
 $project = 'Evolve'
 
-Log-Action -Title 'Clone Repos' -ForegroundColor Magenta -ScriptBlock { 
+Log-Action -Title 'Clone Repos' -ScriptBlock { 
     $developmentPaths = @{RepositoryRoot = 'C:\data\tfs\git'; SQLRoot = 'C:\data\sql'; }
     $developmentPaths.Keys | ForEach-Object { 
         if (!(Test-Path -Path $developmentPaths[$_])) {
@@ -905,11 +867,11 @@ Log-Action -Title 'Clone Repos' -ForegroundColor Magenta -ScriptBlock {
     $utilityPath = (Join-Path -Path (Join-Path -Path $developmentPaths['RepositoryRoot'] -ChildPath $repositoryName) -ChildPath 'Utility' -Resolve)
     $repositoryNames = @(
         # Core
-         'EditorConfig'
-        ,'Evolve'
-        ,'FRFL'
+        'EditorConfig'
+        , 'Evolve'
+        , 'FRFL'
         # Optional
-        ,'TfsBuildExtensions'
+        , 'TfsBuildExtensions'
         # ,'Assist'
         # ,'Callisto'
         # ,'CallRouting'
@@ -926,8 +888,8 @@ Log-Action -Title 'Clone Repos' -ForegroundColor Magenta -ScriptBlock {
     ) | ForEach-Object {
         $repositoryName = $_
         Log-Action -Title "Cloning $($repositoryName)" -NoHeader -ScriptBlock { 
-            $functions=''
-            $commands=@(
+            $functions = ''
+            $commands = @(
                 "$($utilityPath)\CloneAllRepos.ps1 -RepositoryNameStartsWith '$($repositoryName)';"
             )
             $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
@@ -938,7 +900,7 @@ Log-Action -Title 'Clone Repos' -ForegroundColor Magenta -ScriptBlock {
     }
 }
 
-Log-Action -Title 'Visual Studio Configuration' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'TODO: Visual Studio Configuration' -ScriptBlock {
     "
     Run as admin
     Run Visual studio as administrator. Follow the answer linked to run as administrator, even when using the taskbar context menu MRU list -> https://stackoverflow.com/questions/42723232/vs2017-vs-2019-run-as-admin-from-taskbar 
@@ -952,80 +914,202 @@ Log-Action -Title 'Nuget Config' -ScriptBlock {
     Package Sources -> Add a source 'Evolve' directed to https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json 
     Package Sources -> Add a source 'DevExpress' directed to the DevExpress NuGet feed URL from https://www.devexpress.com/ClientCenter/DownloadManager/  once you are logged into your DevExpress account
     "
-    $nugetSources=@{
-        'nuget.org'=@{ Source='https://api.nuget.org/v3/index.json'; Enabled=$true; };
-        'Evolve'=@{ Source='https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json'; Enabled=$true; };
-        'DevExpress'=@{ Source='https://nuget.devexpress.com/pgT3XVjzfXNfzy4wfgmmXQW45CFMkkuoMnb2wHWC1OYcu28quH/api'; Enabled=$true; }
-    }
-    $nugetList=@()
-    $nugetList+=(dotnet nuget list source --format Detailed) -match ('^.*[0-9]* *({0}) .Enabled.$' -f ($nugetSources.Keys -join '|'))
-    if (($nugetList | Where-Object {$_}) -and $nugetList.Count -lt ($nugetSources.Count +1)) {
-        #$nugetSources.Keys|ForEach-Object { dotnet nuget remove source "$($_)" }
-        $nugetList|foreach-object {
+    $sequencePattern = '(\s+)?(?<sequence>\b\d+\b)\.\s+'
+    $namePattern = '(?<name>\b\w.+\b)\s+'
+    $statusPattern = '\[(?<enabled>Enabled|Disabled)\]'
 
+    $nugetSources = @{
+        'nuget.org' = @{ Source = 'https://api.nuget.org/v3/index.json'; Enabled = $true; };
+        'Evolve'    = @{ Source = 'https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json'; Enabled = $true; };
+        #'DevExpress'=@{ Source='https://nuget.devexpress.com/<<your unique api key>>/api'; Enabled=$true; }
+        # Optional
+        # 'Evolve.old'=@{ Source='\\prd-tfs-bld01\Packages\Nuget'; Enabled=$false; }
+        # 'Devexpress 20.1 Local'=@{ Source='C:\Program Files (x86)\Devexpress 20.1\Components\System\Components\Packages'; Enabled=$false; }
+        # 'Microsoft Visual Studio Offline Packages'=@{ Source='C:\Program Files (x86)\Microsoft SDKs\NuGetPackages\'; Enabled=$false; }
+    }
+    $nugetList = @()
+
+    $nugetList += (dotnet nuget list source --format Detailed) -match ("$($sequencePattern)({0})\s+$($statusPattern)" -f ($nugetSources.Keys -join '|'))
+
+    [array]$nugetList = ($nugetlist | ForEach-Object {
+            $result = $_ | ConvertFrom-Text -Pattern "$($sequencePattern)$($namePattern)$($statusPattern)"
+            $result.enabled = ([regex]::Replace($result.enabled, '(?<status>Enabled)', $true.ToString())) # Back reference ${status} could be used for replacement
+            $result.enabled = ([regex]::Replace($result.enabled, '(?<status>Disabled)', $false.ToString())) # Back reference ${status} could be used for replacement
+
+            $result
+        })
+    [array]$nugetSourcesToAdd = $nugetSources.GetEnumerator() | Where-Object { 
+        $_.Key -notmatch ("^($($nugetList.name -join '|'))$")
+    }
+    [array]$nugetSourcesToUpdate = $nugetSources.GetEnumerator() | Where-Object { 
+        $nugetSourceKey = $_.Key
+        $_.Key -in $nugetList.name -and ($nugetList | Where-Object { $_.name -eq $nugetSourceKey } | Select-Object -ExpandProperty enabled) -ne $_.Value.Enabled 
+    }
+
+    if (($nugetList | Where-Object { $_ }) -and ((($nugetSourcesToAdd.Count) -gt 0) -or (($nugetSourcesToUpdate.Count) -gt 0))) {
+        #$nugetSourcesToAdd.Keys|ForEach-Object { dotnet nuget remove source "$($_)" }
+        if ($null -ne $nugetSourcesToAdd) {
+            $nugetSourcesToAdd.GetEnumerator() | ForEach-Object {
+                Write-Host "Adding" $_.Key -ForegroundColor Magenta
+                "dotnet nuget add source '$($_.Value.Source)' --name '$($_.Key)'" | Invoke-Expression
+            }
         }
-        dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
-        #dotnet nuget add source 'C:\Program Files (x86)\Microsoft SDKs\NuGetPackages\' -name 'Microsoft Visual Studio Offline Packages' 
-        #dotnet nuget add source \\prd-tfs-bld01\Packages\Nuget --name Evolve.old
-        #dotnet nuget add disable source -name Evolve.old
-        dotnet nuget add source https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json --name Evolve
-        dotnet nuget add source https://nuget.devexpress.com/pgT3XVjzfXNfzy4wfgmmXQW45CFMkkuoMnb2wHWC1OYcu28quH/api --name DevExpress
-        #dotnet nuget add source 'C:\Program Files (x86)\Devexpress 20.1\Components\System\Components\Packages' --name 'Devexpress 20.1 Local'
-        #dotnet nuget add disable source --name 'Devexpress 20.1 Local'
+
+        if ($null -ne $nugetSourcesToUpdate) {
+            $nugetSourcesToUpdate.GetEnumerator() | ForEach-Object {
+                Write-Host "Updating" $_.Key -ForegroundColor Magenta
+                "dotnet nuget $($(if ($_.Value.Enabled) {'enable'} else {'disable'})) source '$($_.Key)'" | Invoke-Expression
+            }
+        }
     }
 }
 
-Log-Action -Title 'Password Manager' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'TODO: Password Manager' -ForegroundColor Green -ScriptBlock {
     "
     Speak with service desk about access to password manager (currently '1Password')
     "
 }
 
-Log-Action -Title 'SQL Server' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'TODO: SQL Server' -ForegroundColor Green -ScriptBlock {
     "
     Ensure that Full-Text Index is installed, and the server collation MUST be set to SQL_Latin1_General_CP1_CI_AS as we have scripts that are collation sensitive that create temporary stored procs etc. (If SQL is already installed with the wrong server collationfollow these instructions https://docs.microsoft.com/en-us/sql/relational-databases/collations/set-or-change-the-server-collation  )
-    
-    Restore seed databases to your SQL instance from T:\Projects\Secure\Evolve\DatabaseSeeds.
-    Add TEAM\Evolve user with dbo access to the Evolve....... DBs and DataRetention DB
-    Add a linked server object for DEV-SQL-APP01 called DEV-SQL-APP01 and configure Server Options->RPC Out to 'true'. Set Security to `"Be made with the login's current security context`"
-    Update your seeds to current by:-
-    Legacy DB - Running publish on all databases from the database project, or if too far out of date, run project to database compares for all the projects and manually update from the models.
     "
+    Log-Action -Title 'Restore seed databases' -ForegroundColor Magenta -NoHeader -ScriptBlock {
+        "
+        Restore seed databases to your SQL instance from T:\Projects\Secure\Evolve\DatabaseSeeds.
+        "
+    }
+
+    Log-Action -Title "Give $($env:USERDOMAIN)\$($env:USERNAME) dbo access to Evolve* and DataRetention DB's" -ForegroundColor Magenta -NoHeader -ScriptBlock {
+        "
+        Add $($env:USERDOMAIN)\$($env:USERNAME) user with dbo access to the Evolve....... DBs and DataRetention DB
+        "
+    }
+
+    Log-Action -Title "Add a linked server object for DEV-SQL-APP01" -ForegroundColor Magenta -NoHeader -ScriptBlock {
+        "
+        Add a linked server object for DEV-SQL-APP01 called DEV-SQL-APP01 and configure Server Options->RPC Out to 'true'. Set Security to `"Be made with the login's current security context`"
+        "
+    }
+
+    Log-Action -Title "Update your seeds to current" -ForegroundColor Magenta -NoHeader -ScriptBlock {
+        "
+        Update your seeds to current by:-
+        Legacy DB - Running publish on all databases from the database project, or if too far out of date, run project to database compares for all the projects and manually update from the models.
+            "
+    }
 }
 
-Log-Action -Title 'Microservices' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'TODO: Microservices' -ForegroundColor Green -ScriptBlock {
     "
     Run 'update-database' for each from Nuget Package Manager console.
     "
 }
 
-Log-Action -Title 'SQL Server' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'TODO: More SQL Server' -ForegroundColor Green -ScriptBlock {
     "
     Once the databases are up-to-date, execute the spCreateFullTextIndex stored procedure as follows to ensure that the Search full-text index is created:
-    EXEC EvolveApplication.SearchImport.spCreateFullTextIndex
-    Create your user in the aspnet_users table and related tables to grant the correct permissions.
-    SQL Prompt (optional)
-    Get snippets from https://frfl.sharepoint.com/sites/ITTeam/Developement/Forms/AllItems.aspx?viewid=e84320c5-033b-4a12-a5eb-971adf5b1171&id=%2Fsites%2FITTeam%2FDevelopement%2FTools%2FSQL Prompt%2FSnippets 
-    Get Styles from https://frfl.sharepoint.com/sites/ITTeam/Developement/Forms/AllItems.aspx?viewid=e84320c5-033b-4a12-a5eb-971adf5b1171&id=%2Fsites%2FITTeam%2FDevelopement%2FTools%2FSQL Prompt%2FStyles 
     "
+
+    Log-Action -Title "Give $($env:USERDOMAIN)\$($env:USERNAME) dbo access to Evolve* and DataRetention DB's" -ForegroundColor Magenta -NoHeader -ScriptBlock {
+        "
+        EXEC EvolveApplication.SearchImport.spCreateFullTextIndex
+
+        Create your user in the aspnet_users table and related tables to grant the correct permissions.
+        SQL Prompt (optional)
+        Get snippets from https://frfl.sharepoint.com/sites/ITTeam/Developement/Forms/AllItems.aspx?viewid=e84320c5-033b-4a12-a5eb-971adf5b1171&id=%2Fsites%2FITTeam%2FDevelopement%2FTools%2FSQL Prompt%2FSnippets 
+        Get Styles from https://frfl.sharepoint.com/sites/ITTeam/Developement/Forms/AllItems.aspx?viewid=e84320c5-033b-4a12-a5eb-971adf5b1171&id=%2Fsites%2FITTeam%2FDevelopement%2FTools%2FSQL Prompt%2FStyles 
+        "
+    }
 }
 
-Log-Action -Title 'Logging Distribution' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'Logging Distribution' -ScriptBlock {
     "
+    Building FrFl.Service.LoggingDistributor If this fails follow the manual instructions
+
+    Manual Instructions
     In the main Evolve solution, build the FrFl.Service.LoggingDistributor project
     Manually copy the Build output to a suitable location (suggested C:\Program Files (x86)\First Response Finance Ltd\Evolve Logging Distributor )
     From a command prompt run FrFl.Service.LoggingDistributor.exe /i /user TEAM\Evolve /password ****** to install as a service
     "
+    $path='Evolve'|ForEach-Object { Get-ChildItem -Path "C:\data\tfs\git\$($_)" -file -Recurse -Filter *.sln|Select-Object -First 1 -ExpandProperty DirectoryName }
+    Invoke-CommandInPath -Path $path -ScriptBlock {
+        $loggingDistributerPath=(Get-ChildItem -Path . -file -Recurse -Filter FrFl.Service.LoggingDistributor.*proj|Select-Object -First 1)
+        $devEnvParams = [ordered]@{
+            "Rebuild"                                 = "`"Release`|AnyCPU`""
+            "Project"                                 = "`"$(Resolve-Path -Relative $loggingDistributerPath)`""
+            # "p:SkipInvalidConfigurations"           = 'true'
+            # "p:GenerateProjectSpecificOutputFolder" = 'true'
+            # "p:DeployOnBuild"                       = 'true'
+            # "p:WebPublishMethod"                    = 'Package'
+            # #"p:OutDir"                             = "$(Build.BinariesDirectory)\"
+            # "nodeReuse:false"                       = $null
+            "Out"                                     = "`"$(Join-Path $env:TEMP -ChildPath "BuildLog.log")`""
+        }
+
+
+        git fetch --prune --all --quiet
+        git pull --all --quiet
+
+        $buildCommands=@(
+            'Build'
+            'Clean'
+            'Deploy'
+            'Out'
+            'Project'
+            'ProjectConfig'
+            'Rebuild'
+            'Upgrade'
+        )
+        $devEnvParamsToString = "$(($devEnvParams.Keys|ForEach-Object { 
+            "-$($_)$(if ($null -ne $devEnvParams[$_]) { "$(if ($_ -notin $buildCommands) {"="} else { " "})$($devEnvParams[$_])" })" 
+        }) -join ' ')" 
+        [void](Remove-Item -Path $devEnvParams['Out'] -Force -ErrorAction SilentlyContinue)
+        Start-Sleep -Seconds 2
+        try {
+            $command = ". '$($script:vs2022ExePath)' $(Resolve-Path -Relative .\FrFl.Evolve.sln) $($devEnvParamsToString)"
+            Log-Action -Title "Building $($command)" -NoHeader -ScriptBlock {
+                Invoke-Expression $command
+            }
+            Start-Sleep -Seconds 2
+            Get-Process -name MSBuild*,devenv*|Wait-Process -TimeoutSec 180
+    
+            $succeeded = '(?<succeeded>\b(?:(\d+))\b)\s+succeeded'
+            $failed = '(?<failed>\b(?:(\d+))\b)\s+failed'
+            $skipped = '(?<skipped>\b(?:(\d+))\b)\s+skipped'
+            $result=ConvertFrom-Text -Path $devEnvParams['Out'].Replace('"','') -Pattern "=+.*build.*$($succeeded),\s+$($failed),\s+$($skipped)\s+=+"
+            if ($result -and $result.failed -gt 0) {
+                Write-Host -Object ("Building project $($devEnvParams['Project']), or one of its dependencies failed  for details check log $($devEnvParams['Out'])")
+            } else {
+                Log-Action -Title "Create logging distribution folder" -NoHeader -ScriptBlock {
+                    $source="$(Resolve-Path -Relative -Path (Join-Path $loggingDistributerPath.DirectoryName -ChildPath "bin\Release"))\*"
+                    $destination="C:\Program Files (x86)\First Response Finance Ltd\Evolve Logging Distributor"
+                    [void](New-Item -ItemType Directory -Path $destination -Force -ErrorAction SilentlyContinue)
+                    [void]($result=Copy-Item -Path $source -Destination $destination -Recurse -Force -PassThru)
+                    Write-Host -Object ("   logging distributer has been set up in $($destination) copyied $($result.Count) files") -ForegroundColor Cyan
+                    Log-Action -Title 'TODO: Setting up Logging Distributer as a Service' -NoHeader -ForegroundColor Green -ScriptBlock {
+                        Invoke-CommandInPath -Path $destination -ScriptBlock {
+                            "         FrFl.Service.LoggingDistributor.exe /i /user TEAM\Evolve /password ******"
+                        }
+                    }
+                }
+            }
+        }
+        finally {
+            <#Do this after the try block regardless of whether an exception occurred or not#>
+        }
+    }
 }
 
-Log-Action -Title 'Zeacom' -ForegroundColor Green -ScriptBlock {
+exit 1
+Log-Action -Title 'TODO: Zeacom' -ForegroundColor Green -ScriptBlock {
     "
     Open an administrator command prompt
     Execute C:\Program Files (x86)\Telephony\CTI\Bin\ZCom.exe /regserver
     "
 }
 
-Log-Action -Title 'Solution Build & Run' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlock {
     "
     Connect to the VPN if you arn't already
     In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig>DevEnvMigration.bat
@@ -1039,7 +1123,7 @@ Log-Action -Title 'Solution Build & Run' -ForegroundColor Green -ScriptBlock {
     "
 }
 
-Log-Action -Title 'Website setup' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'TODO: Website setup' -ForegroundColor Green -ScriptBlock {
     "
     Setting up and running the website has a few additional steps. They are,
 
@@ -1058,18 +1142,18 @@ Log-Action -Title 'Website setup' -ForegroundColor Green -ScriptBlock {
 }
 
 Log-Action -Title "Update Outdated packages" -ScriptBlock {
-    $outdated=choco outdated --limit-output|Select-Object @{E={ $_.Split('|')|Select-Object -First 1 };N="Id"},@{E={ $_.Split('|')|Select-Object -Skip 1 -First 1 };N="CurrentVersion"},@{E={ $_.Split('|')|Select-Object -Skip 2 -First 1 };N="NewVersion"},@{E={ $_.Split('|')|Select-Object -Skip 3 -First 1 };N="Pinned"}
-    $outdated|Where-Object {!("$($_.Pinned)" -as [bool]) }|ForEach-Object { choco upgrade --yes $_.Id --limit-output }
+    $outdated = choco outdated --limit-output | Select-Object @{E = { $_.Split('|') | Select-Object -First 1 }; N = "Id" }, @{E = { $_.Split('|') | Select-Object -Skip 1 -First 1 }; N = "CurrentVersion" }, @{E = { $_.Split('|') | Select-Object -Skip 2 -First 1 }; N = "NewVersion" }, @{E = { $_.Split('|') | Select-Object -Skip 3 -First 1 }; N = "Pinned" }
+    $outdated | Where-Object { !("$($_.Pinned)" -as [bool]) } | ForEach-Object { choco upgrade --yes $_.Id --limit-output }
 }
 
 Log-Action -Title "Set Up SymbolicLinks to folders" -NoHeader -ScriptBlock {
-    $symbolicLinks=@{ 
-        'Editor Config' = @{ SymbolicLink=[string]"C:\Data\TFS\Git\.editorconfig"; SymbolicLinkTarget = [string]"C:\data\tfs\git\EditorConfig\.editorconfig"; Backup = [switch]$false; } 
-        'Projects' = @{ SymbolicLink=[string]"C:\Projects"; SymbolicLinkTarget = [string]"C:\data\tfs\git"; Backup = [switch]$false; } 
+    $symbolicLinks = @{ 
+        'Editor Config' = @{ SymbolicLink = [string]"C:\Data\TFS\Git\.editorconfig"; SymbolicLinkTarget = [string]"C:\data\tfs\git\EditorConfig\.editorconfig"; Backup = [switch]$false; } 
+        'Projects'      = @{ SymbolicLink = [string]"C:\Projects"; SymbolicLinkTarget = [string]"C:\data\tfs\git"; Backup = [switch]$false; } 
     }
 
-    $symbolicLinks.Keys|ForEach-Object { 
-        $symbolicLink=$symbolicLinks["$($_)"] 
+    $symbolicLinks.Keys | ForEach-Object { 
+        $symbolicLink = $symbolicLinks["$($_)"] 
         Log-Action -Title "$($_)" -NoHeader -ScriptBlock {
             Create-SymbolicLink -SymbolicLinks $symbolicLink
         }        
