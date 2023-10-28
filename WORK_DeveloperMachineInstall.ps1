@@ -5,6 +5,9 @@
 [CmdletBinding()]
 param()
 
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+$IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
+
 function _logMessage {
     param(
         [Parameter()][string]$Message
@@ -111,6 +114,7 @@ try {
     Disable-MicrosoftUpdate
     Disable-UAC
 
+    if (!$IsVirtual) {
     Invoke-ExternalCommand -Command { 
         #region helper
         $_setFeatureState={
@@ -133,6 +137,7 @@ try {
         $enabledList|Foreach-Object {
             &$_setFeatureState -Feature $_ -TargetState 'enable'
         }
+    }
     }
     # Get the base URI path from the ScriptToCall value
     <#$Boxstarter['ScriptToCall']=@"
