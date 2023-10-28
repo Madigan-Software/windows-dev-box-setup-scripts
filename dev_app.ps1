@@ -3,6 +3,7 @@
 # Common dev settings for desktop app development
 
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+$IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
  
 function _logMessage {
     param(
