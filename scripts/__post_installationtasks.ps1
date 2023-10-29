@@ -1,3 +1,5 @@
+#[Diagnostics.CodeAnalysis.SuppressMessage("PSUseApprovedVerbs", Scope="function", Target="Using-Object", Justification="Wrapping dispose pattern")]
+
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
 
 $script:vs2022RootPath = 'C:\Program Files\Microsoft Visual Studio\2022\Professional'
@@ -191,10 +193,10 @@ function Create-SymbolicLink {
 function Get-Execution {
     $CallStack = Get-PSCallStack | Select-Object -Property *
     if (
-         ($CallStack.Count -ne $null) -or
+         ($null -ne $CallStack.Count) -or
          (($CallStack.Command -ne '<ScriptBlock>') -and
          ($CallStack.Location -ne '<No file>') -and
-         ($CallStack.ScriptName -ne $Null))
+         ($null -ne $CallStack.ScriptName))
     ) {
         if ($CallStack.Count -eq 1) {
             $Output = $CallStack[0]
@@ -214,10 +216,10 @@ function Get-IndentationLevel {
     $level = 0
     $CallStack = Get-PSCallStack | Select-Object -Property *
     if (
-         ($CallStack.Count -ne $null) -or
+         ($null -ne $CallStack.Count) -or
          (($CallStack.Command -ne '<ScriptBlock>') -and
          ($CallStack.Location -ne '<No file>') -and
-         ($CallStack.ScriptName -ne $Null))
+         ($null -ne $CallStack.ScriptName))
     ) {
         $level = $CallStack.Count - 1
     }
@@ -900,7 +902,7 @@ Log-Action -Title 'Clone Repos' -ScriptBlock {
     }
 }
 
-Log-Action -Title 'TODO: Visual Studio Configuration' -ScriptBlock {
+Log-Action -Title 'TODO: Visual Studio Configuration' -ForegroundColor Green -ScriptBlock {
     "
     Run as admin
     Run Visual studio as administrator. Follow the answer linked to run as administrator, even when using the taskbar context menu MRU list -> https://stackoverflow.com/questions/42723232/vs2017-vs-2019-run-as-admin-from-taskbar 
@@ -909,6 +911,7 @@ Log-Action -Title 'TODO: Visual Studio Configuration' -ScriptBlock {
 
 Log-Action -Title 'Nuget Config' -ScriptBlock {
     "
+    Manual Instructions
     In Tools->Nuget Package Manager->Package Manager Settings
     General -> Change the Default package management format to PackageReference
     Package Sources -> Add a source 'Evolve' directed to https://pkgs.dev.azure.com/FrFl-Development/_packaging/EvolvePackage/nuget/v3/index.json 
@@ -984,6 +987,82 @@ Log-Action -Title 'TODO: SQL Server' -ForegroundColor Green -ScriptBlock {
         "
         Add $($env:USERDOMAIN)\$($env:USERNAME) user with dbo access to the Evolve....... DBs and DataRetention DB
         "
+        function Using-Object {
+            [CmdletBinding()]
+            param (
+                [Parameter(Mandatory = $true)][AllowEmptyString()][AllowEmptyCollection()][AllowNull()][Object]$InputObject
+               ,[Parameter(Mandatory = $true)][scriptblock]$ScriptBlock
+            )
+        
+            try {
+                & $ScriptBlock
+            } finally {
+                if ($null -ne $InputObject -and $InputObject -is [System.IDisposable]) {
+                    $InputObject.Dispose()
+                }
+            }
+        }
+    
+        $commandList = [System.Collections.ArrayList]::new()
+        try {
+            Using-Object ($sqlConnection = [System.Data.SqlClient.SqlConnection]::new("Data Source=$($env:COMPUTERNAME);Initial Catalog=master; Integrated Security=True;")) {
+                $sqlConnection.Open()
+                $content = $null #Get-Content $scriptFileNameGoesHere
+                [void]($commandList.Add('
+                USE [master]; 
+                --IF NOT EXISTS (SELECT 1 FROM master.sys.server_principals WHERE [name] = N''{0}\{1}'' and [type] IN (''C'',''E'', ''G'', ''K'', ''S'', ''U'')) AND EXISTS (SELECT 1 FROM master.sys.server_principals WHERE [name] = N''sa'' and [type] IN (''C'',''E'', ''G'', ''K'', ''S'', ''U'')) BEGIN 
+                    DECLARE @sql NVARCHAR(MAX) =''''
+                    CREATE LOGIN [{0}\{1}] 
+                    FROM WINDOWS  
+                    WITH DEFAULT_DATABASE=[master]; ''''
+
+                    --EXEC sp_executesql @sql
+                --END
+                ' -f $($env:USERDOMAIN),$($env:USERNAME)))
+                <#
+                [void]($commandList.Add('
+                USE [DataRetention]; 
+                DECLARE @sql NVARCHAR(MAX) =''''
+                CREATE USER [{0}\{1}] FOR LOGIN [{0}\{1}] WITH DEFAULT_SCHEMA=[dbo]; 
+                EXEC sp_addrolemember N''db_datareader'', N''{0}\{1}'';
+
+                --EXEC sp_executesql @sql
+                ' -f $($env:USERDOMAIN),$($env:USERNAME)))
+                #>
+                $content|Where-Object {$null -ne $_} | Foreach-Object {
+                    Write-Verbose -Message "[002.2]" -Verbose
+                    $command=$_
+                    if ($command.Trim() -eq "GO") { $commandList.Add($command); $command = "" } 
+                    else { $command =  $command + $_ +"`r`n" }
+                }
+                $commandList | ForEach-Object {
+                    $command=$_
+                    Using-Object ($sqlCommand = [System.Data.SqlClient.SqlCommand]::new($command, $sqlConnection)) {
+                        $DataSet = [System.Data.DataSet]::new()
+                        try {
+                            if ($sqlCommand.CommandText -match 'SELECT ') {
+                                $SqlAdapter = [System.Data.SqlClient.SqlDataAdapter]::new()
+                                $SqlAdapter.SelectCommand = $sqlCommand
+                                $result=$SqlAdapter.Fill($DataSet)
+                                Write-Host -Object ("Result For $($command): $($result)") -ForegroundColor Cyan
+                            } else {
+                                $sqlCommand.ExecuteNonQuery()
+                            }
+                        } catch {
+                            <#Do this if a terminating exception happens#>
+                            Throw [Exception]::new("Error occurred executing Command: $(if ($sqlCommand.CommandText -match 'SELECT ') { 'ExecuteReader' } else { 'ExecuteNonQuery' })`n$($command|Out-String)", $_.Exception)
+                        } finally{
+                        }
+                        $DataSet.Tables[0]
+                    }
+                }
+            }
+        }
+        catch {
+            <#Do this if a terminating exception happens#>
+            Throw [Exception]::new("Error occurred executing post database install commands`n$($commandList|Out-String)", $_.Exception)
+        }
+    
     }
 
     Log-Action -Title "Add a linked server object for DEV-SQL-APP01" -ForegroundColor Magenta -NoHeader -ScriptBlock {
@@ -1102,11 +1181,17 @@ Log-Action -Title 'Logging Distribution' -ScriptBlock {
 }
 
 exit 1
-Log-Action -Title 'TODO: Zeacom' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'Zeacom' -ForegroundColor Green -ScriptBlock {
     "
+    Manual Instructions 
     Open an administrator command prompt
     Execute C:\Program Files (x86)\Telephony\CTI\Bin\ZCom.exe /regserver
     "
+    Invoke-CommandInPath -Path "C:\Program Files (x86)\Telephony\CTI\Bin\" -ScriptBlock {
+        Log-Action -Title 'Register Zecom Server' -NoHeader -ScriptBlock {
+            ZCom.exe /regserver
+        }
+    }
 }
 
 Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlock {
