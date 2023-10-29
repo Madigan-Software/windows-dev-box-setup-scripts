@@ -17,6 +17,16 @@ exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\pre-co
 # If your filesystem is not case-sensitive you can use
 # .githooks/replace_by_git_vars.py README.template.md README.md
 
+# https://dev.to/anibalardid/how-to-check-commit-message-and-branch-name-with-git-hooks-without-any-new-installation-n34
+# BRANCH=$(git rev-parse --abbrev-ref HEAD)
+# REGEX="^(dev|release)-([0-9]+)-q([0-9]+)\.([0-9]+)\.(.+)$"
+#
+# if ! [[ $BRANCH =~ $REGEX ]]; then
+#   echo "Your commit was rejected due to branching name"
+#   echo "Please rename your branch with '(dev|release)-YYYY-qX.X.X' syntax"
+#   exit 1
+# fi
+
 echo "###### PRE-COMMIT git hook - END"
 echo "#####################"
 exit 0
