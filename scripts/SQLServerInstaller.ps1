@@ -1,3 +1,4 @@
+[Diagnostics.CodeAnalysis.SuppressMessage("PSUseApprovedVerbs", Scope="function", Target="Using-Object", Justification="Wrapping dispose pattern")]
 [CmdletBinding()]
 param(
     [Parameter()][ValidateSet('2019','2022')][string]$Version='2022'
