@@ -220,7 +220,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
                     "    + FullyQualifiedErrorId : {4}`n"
     $fields = $_.InvocationInfo.MyCommand.Name,$_.ErrorDetails.Message,$_.InvocationInfo.PositionMessage,$_.CategoryInfo.ToString(), $_.FullyQualifiedErrorId
     Write-Host -Object ($formatstring -f $fields) -ForegroundColor Red -BackgroundColor Black
-    throw $_.Exception
+    throw (New-Object System.Exception(($formatstring -f $fields), $_.Exception))
 } finally {
     #--- reenabling critial items ---
     Enable-UAC
