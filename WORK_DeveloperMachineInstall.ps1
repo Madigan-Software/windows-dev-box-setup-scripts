@@ -228,4 +228,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
 
     $_message=$_message.Replace("- Start ","- End ")
     _logMessage -Message $_message -ForegroundColor Cyan
+
+    $webLauncherUrl=https://dev.azure.com/FrFl-Development/Evolve
+    Start-Process microsoft-edge:$webLauncherUrl
 }
