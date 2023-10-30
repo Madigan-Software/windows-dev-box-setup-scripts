@@ -5,10 +5,15 @@
 [CmdletBinding()]
 param()
 
-$boxstarterDebug=$env:boxstarterdebug -eq "true"
-$debuggerAction = { if ( $boxstarterDebug ) {Break} } # kudos https://petri.com/conditional-breakpoints-in-powershell/
+$debuggerAction = { 
+    if ( $boxstarterDebug ) {
+        Break
+    } 
+} # kudos https://petri.com/conditional-breakpoints-in-powershell/
+Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction
+[bool]$boxstarterDebug=$env:boxstarterdebug -eq "true"
 
-[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { $null })
+[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
 
 if (<#$pp['debug']#> $boxstarterDebug) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
@@ -19,8 +24,8 @@ if (<#$pp['debug']#> $boxstarterDebug) {
 }
  
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
-Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
 $IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
+[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
 
 function _logMessage {
     param(
@@ -74,13 +79,14 @@ function _chocolatey-InstallOrUpdate {
        ,[Parameter()][string]$Source=""
     )
 
-    [array]$remotePackageList=$(choco search $PackageId --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
     if ($null -eq $(Get-Command -Name choco)) {
         throw "Chocolatey is not installed, unable to continue"
         Exit 1
     }
 
+    [array]$remotePackageList=$(choco search $PackageId --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
     $remotePackageListVersion = ($remotePackageList.Version|Measure-Object -Maximum).Maximum
+
     [array]$packageList=$(choco list $PackageId --local-only --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
     $packageInstalledVersion=if ($PackageId -eq 'chocolatey') { $(@(($(choco --version) -as [Version]), $packageList.Version)|Measure-Object -Maximum).Maximum } else { $($packageList.Version|Measure-Object -Maximum).Maximum }
 
@@ -98,6 +104,8 @@ function _chocolatey-InstallOrUpdate {
             _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
         }
     }; 
+    Write-Host -Object ("$($packageId) v$($packageList|Select-Object -ExpandProperty Version)") -ForegroundColor Cyan;
+
     Write-Host -Object ("$($packageId) v$(choco --version)") -ForegroundColor Cyan;
 }
 
@@ -128,7 +136,7 @@ try {
     Disable-MicrosoftUpdate
     Disable-UAC
 
-    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
+    if ($boxstarterDebug) { Set-PSBreakpoint }
     if (!$IsVirtual) {
         Invoke-ExternalCommand -Command { 
             #region helper
@@ -194,7 +202,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     }
     
     #--- Setting up Windows OS ---
-    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
+    if ($boxstarterDebug) { Set-PSBreakpoint }
     #executeScript "scripts/WinGetInstaller.ps1"
     #executeScript "scripts/WindowsOptionalFeatures.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
@@ -213,12 +221,12 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     }
     
     #--- Setting up SQL Server ---
-    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
+    if ($boxstarterDebug) { Set-PSBreakpoint }
     executeScript "scripts/SQLServerInstaller.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
 
     #--- Setting up base DevEnvironment ---
-    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
+    if ($boxstarterDebug) { Set-PSBreakpoint }
     executeScript "dev_app.ps1";
     if (Test-PendingReboot) { Invoke-Reboot }
 } catch {
