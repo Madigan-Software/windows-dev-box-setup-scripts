@@ -2,9 +2,17 @@
 # Author: Microsoft
 # Common dev settings for desktop app development
 
+if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
+    $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
+    Write-Host "Debug was passed in as a parameter"
+    Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
+    Write-Host "Debug-Runspace -Id $($runspace.id)"
+    Wait-Debugger
+}
+ 
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
 $IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
- 
+
 function _logMessage {
     param(
         [Parameter()][string]$Message
@@ -109,12 +117,13 @@ try {
         $helperUri = $Boxstarter['ScriptToCall']
         $strpos = $helperUri.IndexOf($bstrappackage)
         $helperUri = $helperUri.Substring($strpos + $bstrappackage.Length)
+        $helperUri = $helperUri -replace ('(?:(\s+\-\w+)+)'), ''
         $helperUri = $helperUri.TrimStart("'", " ")
         $helperUri = $helperUri.TrimEnd("'", " ")
 
-        _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
+        Write-Verbose -Message "uri is $($helperUri|Out-String)"
         [void]([System.Uri]::TryCreate($helperUri, [System.UriKind]::RelativeOrAbsolute, [ref]$helperUri));
-        _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
+        Write-Verbose -Message "uri is $($helperUri|Out-String)"
         $helperUri
         $helperUri.AbsolutePath
     
@@ -244,7 +253,16 @@ try {
     }
     
     #executeScript "WindowsTemplateStudio.ps1";
-    #executeScript "GetUwpSamplesOffGithub.ps1";        
+    #executeScript "GetUwpSamplesOffGithub.ps1";
+    if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
+        $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
+        Write-Host "Debug was passed in as a parameter"
+        Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
+        Write-Host "Debug-Runspace -Id $($runspace.id)"
+        Wait-Debugger
+    }
+     
+    executeScript "__post_installationtasks.ps1";            
 } catch {
     # Write-ChocolateyFailure $($MyInvocation.MyCommand.Name) $($_.Exception.ToString())
     $formatstring = "{0} : {1}`n{2}`n" +

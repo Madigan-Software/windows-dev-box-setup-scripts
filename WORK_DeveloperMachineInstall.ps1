@@ -5,15 +5,16 @@
 [CmdletBinding()]
 param()
 
-if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
-$IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
-if (<#$pp['debug']#> $env:boxstarterdebug=true) {
+if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
     Write-Host "Debug was passed in as a parameter"
     Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
     Write-Host "Debug-Runspace -Id $($runspace.id)"
     Wait-Debugger
 }
+ 
+if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+$IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
 
 function _logMessage {
     param(
@@ -157,6 +158,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     if (![string]::IsNullOrEmpty($Boxstarter['ScriptToCall'])) {
         $strpos = $helperUri.IndexOf($bstrappackage)
         $helperUri = $helperUri.Substring($strpos + $bstrappackage.Length)
+        $helperUri = $helperUri -replace ('(?:(\s+\-\w+)+)'), ''
         $helperUri = $helperUri.TrimStart("'", " ")
         $helperUri = $helperUri.TrimEnd("'", " ")
         [void]([System.Uri]::TryCreate($helperUri, [System.UriKind]::RelativeOrAbsolute, [ref]$helperUri));

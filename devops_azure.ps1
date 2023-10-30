@@ -2,6 +2,14 @@
 # Author: Microsoft
 # Common settings for azure devops
 
+if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
+    $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
+    Write-Host "Debug was passed in as a parameter"
+    Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
+    Write-Host "Debug-Runspace -Id $($runspace.id)"
+    Wait-Debugger
+}
+ 
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
 
 try {
@@ -16,12 +24,13 @@ try {
         $helperUri = $Boxstarter['ScriptToCall']
         $strpos = $helperUri.IndexOf($bstrappackage)
         $helperUri = $helperUri.Substring($strpos + $bstrappackage.Length)
+        $helperUri = $helperUri -replace ('(?:(\s+\-\w+)+)'), ''
         $helperUri = $helperUri.TrimStart("'", " ")
         $helperUri = $helperUri.TrimEnd("'", " ")
 
-        _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
+        Write-Verbose -Message "uri is $($helperUri|Out-String)"
         [void]([System.Uri]::TryCreate($helperUri, [System.UriKind]::RelativeOrAbsolute, [ref]$helperUri));
-        _logMessage -Message "uri is $($helperUri|Out-String)" -ForegroundColor Gray
+        Write-Verbose -Message "uri is $($helperUri|Out-String)"
         $helperUri
         $helperUri.AbsolutePath
     
