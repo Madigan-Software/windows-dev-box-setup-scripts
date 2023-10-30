@@ -7,6 +7,13 @@ param()
 
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
 $IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
+if (<#$pp['debug']#> $env:boxstarterdebug=true) {
+    $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
+    Write-Host "Debug was passed in as a parameter"
+    Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
+    Write-Host "Debug-Runspace -Id $($runspace.id)"
+    Wait-Debugger
+}
 
 function _logMessage {
     param(
