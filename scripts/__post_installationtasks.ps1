@@ -1,3 +1,7 @@
+$headerMessageWidth=120
+$headerMessage="$('=' * $headerMessageWidth)`n=$(' ' * (($headerMessageWidth - $("{0}".Length))/2)) {0} $(' ' * (($headerMessageWidth - $("{0}".Length))/2))=`n$('=' * $headerMessageWidth)`n"
+Write-Host -Object ($headerMessage -f $MyInvocation.MyCommand.Name) -ForegroundColor Magenta
+
 #[Diagnostics.CodeAnalysis.SuppressMessage("PSUseApprovedVerbs", Scope="function", Target="Using-Object", Justification="Wrapping dispose pattern")]
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
@@ -680,7 +684,7 @@ choco install --yes urlrewrite --limit-output
 # IIS hosting bundle for .net (https://www.microsoft.com/net/permalink/dotnetcore-current-windows-runtime-bundle-installer )
 # Run a separate PowerShell process because the script calls exit, so it will end the current PowerShell session.
 #&powershell -NoProfile -ExecutionPolicy unrestricted -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; &([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://dot.net/v1/dotnet-install.ps1'))) <additional install-script args>"
-Log-Action -Title 'IIS hosting bundle' -ForegroundColor Magenta -ScriptBlock { 
+Log-Action -Title 'IIS hosting bundle' -ScriptBlock { 
     $dotnetInstallerPath = (Join-Path -Path $env:TEMP -ChildPath 'dotnet-install.ps1')
     try {
         #Invoke-WebRequest 'https://dot.net/v1/dotnet-install.ps1' -Proxy $env:HTTP_PROXY -ProxyUseDefaultCredentials -OutFile $dotnetInstallerPath;
@@ -698,7 +702,7 @@ Log-Action -Title 'IIS hosting bundle' -ForegroundColor Magenta -ScriptBlock {
 choco install --yes wixtoolset --limit-output
 #choco install --yes wix35 --limit-output
 
-Log-Action -Title 'WIX Extension' -NoHeader -ForegroundColor Magenta -ScriptBlock {
+Log-Action -Title 'WIX Extension' -NoHeader -ScriptBlock {
     # WIX Extension(https://marketplace.visualstudio.com/items?itemName=WixToolset.WixToolsetVisualStudio2022Extension )
     #   Install-ChocolateyVsixPackage -packageName "wixtoolsetvisualstudio2019extension" -vsixUrl "https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2019extension/1.0.0.18/1640535816037/Votive2019.vsix" -vsVersion 17.1.0
     #  https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2022extension/1.0.0.22/1668223914320/Votive2022.vsix
@@ -845,7 +849,7 @@ az --version;
 }
 
 # Azure Artifacts Credential Provider (https://github.com/microsoft/artifacts-credprovider#setup )
-Log-Action -Title 'Azure Artifacts Credential' -ForegroundColor Magenta -ScriptBlock { Invoke-Expression "& { $(Invoke-RestMethod https://aka.ms/install-artifacts-credprovider.ps1) } -AddNetfx" }
+Log-Action -Title 'Azure Artifacts Credential' -ScriptBlock { Invoke-Expression "& { $(Invoke-RestMethod https://aka.ms/install-artifacts-credprovider.ps1) } -AddNetfx" }
 
 # Clone Evolve Repos
 $organisation = 'FrFl-Development'
@@ -953,14 +957,14 @@ Log-Action -Title 'Nuget Config' -ScriptBlock {
         #$nugetSourcesToAdd.Keys|ForEach-Object { dotnet nuget remove source "$($_)" }
         if ($null -ne $nugetSourcesToAdd) {
             $nugetSourcesToAdd.GetEnumerator() | ForEach-Object {
-                Write-Host "Adding" $_.Key -ForegroundColor Magenta
+                Write-Host "Adding" $_.Key -ForegroundColor DarkBlue
                 "dotnet nuget add source '$($_.Value.Source)' --name '$($_.Key)'" | Invoke-Expression
             }
         }
 
         if ($null -ne $nugetSourcesToUpdate) {
             $nugetSourcesToUpdate.GetEnumerator() | ForEach-Object {
-                Write-Host "Updating" $_.Key -ForegroundColor Magenta
+                Write-Host "Updating" $_.Key -ForegroundColor DarkBlue
                 "dotnet nuget $($(if ($_.Value.Enabled) {'enable'} else {'disable'})) source '$($_.Key)'" | Invoke-Expression
             }
         }
@@ -977,13 +981,13 @@ Log-Action -Title 'TODO: SQL Server' -ForegroundColor Green -ScriptBlock {
     "
     Ensure that Full-Text Index is installed, and the server collation MUST be set to SQL_Latin1_General_CP1_CI_AS as we have scripts that are collation sensitive that create temporary stored procs etc. (If SQL is already installed with the wrong server collationfollow these instructions https://docs.microsoft.com/en-us/sql/relational-databases/collations/set-or-change-the-server-collation  )
     "
-    Log-Action -Title 'Restore seed databases' -ForegroundColor Magenta -NoHeader -ScriptBlock {
+    Log-Action -Title 'Restore seed databases' -ForegroundColor DarkYellow -NoHeader -ScriptBlock {
         "
         Restore seed databases to your SQL instance from T:\Projects\Secure\Evolve\DatabaseSeeds.
         "
     }
 
-    Log-Action -Title "Give $($env:USERDOMAIN)\$($env:USERNAME) dbo access to Evolve* and DataRetention DB's" -ForegroundColor Magenta -NoHeader -ScriptBlock {
+    Log-Action -Title "Give $($env:USERDOMAIN)\$($env:USERNAME) dbo access to Evolve* and DataRetention DB's" -ForegroundColor DarkYellow -NoHeader -ScriptBlock {
         "
         Add $($env:USERDOMAIN)\$($env:USERNAME) user with dbo access to the Evolve....... DBs and DataRetention DB
         "
@@ -1065,13 +1069,13 @@ Log-Action -Title 'TODO: SQL Server' -ForegroundColor Green -ScriptBlock {
     
     }
 
-    Log-Action -Title "Add a linked server object for DEV-SQL-APP01" -ForegroundColor Magenta -NoHeader -ScriptBlock {
+    Log-Action -Title "Add a linked server object for DEV-SQL-APP01" -ForegroundColor DarkYellow -NoHeader -ScriptBlock {
         "
         Add a linked server object for DEV-SQL-APP01 called DEV-SQL-APP01 and configure Server Options->RPC Out to 'true'. Set Security to `"Be made with the login's current security context`"
         "
     }
 
-    Log-Action -Title "Update your seeds to current" -ForegroundColor Magenta -NoHeader -ScriptBlock {
+    Log-Action -Title "Update your seeds to current" -ForegroundColor DarkYellow -NoHeader -ScriptBlock {
         "
         Update your seeds to current by:-
         Legacy DB - Running publish on all databases from the database project, or if too far out of date, run project to database compares for all the projects and manually update from the models.
@@ -1090,7 +1094,7 @@ Log-Action -Title 'TODO: More SQL Server' -ForegroundColor Green -ScriptBlock {
     Once the databases are up-to-date, execute the spCreateFullTextIndex stored procedure as follows to ensure that the Search full-text index is created:
     "
 
-    Log-Action -Title "Give $($env:USERDOMAIN)\$($env:USERNAME) dbo access to Evolve* and DataRetention DB's" -ForegroundColor Magenta -NoHeader -ScriptBlock {
+    Log-Action -Title "Give $($env:USERDOMAIN)\$($env:USERNAME) dbo access to Evolve* and DataRetention DB's" -ForegroundColor DarkYellow -NoHeader -ScriptBlock {
         "
         EXEC EvolveApplication.SearchImport.spCreateFullTextIndex
 

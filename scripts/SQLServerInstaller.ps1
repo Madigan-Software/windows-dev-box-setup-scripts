@@ -1,3 +1,7 @@
+$headerMessageWidth=120
+$headerMessage="$('=' * $headerMessageWidth)`n=$(' ' * (($headerMessageWidth - $("{0}".Length))/2)) {0} $(' ' * (($headerMessageWidth - $("{0}".Length))/2))=`n$('=' * $headerMessageWidth)`n"
+Write-Host -Object ($headerMessage -f $MyInvocation.MyCommand.Name) -ForegroundColor Magenta
+
 [Diagnostics.CodeAnalysis.SuppressMessage("PSUseApprovedVerbs", Scope="function", Target="Using-Object", Justification="Wrapping dispose pattern")]
 [CmdletBinding()]
 param(
@@ -89,10 +93,10 @@ try {
 ========================================================================================================================
 *                                      I n s t a l l i n g   S Q L   S e r v e r                                      *
 ========================================================================================================================
-"@ -ForegroundColor Magenta
+"@ -ForegroundColor DarkYellow
     if (!(_IsMsSQLServerInstalled '.')) {
         $packageParameters = $("'{0}'" -f $($commandArgs -join ' '))
-        _logMessage -Message "PP: $($packageParameters)" -ForegroundColor DarkMagenta
+        _logMessage -Message "PP: $($packageParameters)" -ForegroundColor DarkYellow
     
         _chocolatey-InstallOrUpdate -PackageId "$($PackageId)" -PackageParameters $packageParameters
     }
@@ -105,7 +109,7 @@ try {
 ========================================================================================================================
 *                  I n s t a l l i n g   S Q L   S e r v e r   -   M a n a g e m e n t   S t u d i o                  *
 ========================================================================================================================
-"@ -ForegroundColor Magenta
+"@ -ForegroundColor DarkYellow
     _chocolatey-InstallOrUpdate -PackageId "$($ProductName)-management-studio" -PackageParameters $packageParameters
     
     _logMessage -Message @"
@@ -113,7 +117,7 @@ try {
 ========================================================================================================================
 *                                               P o s t   I n s t a l l                                               *
 ========================================================================================================================
-"@ -ForegroundColor Magenta
+"@ -ForegroundColor DarkYellow
     function Using-Object
     {
         [CmdletBinding()]

@@ -2,10 +2,19 @@
 # Author: Microsoft
 # Common dev settings for desktop app development
 
-$boxstarterDebug=$env:boxstarterdebug -eq "true"
-$debuggerAction = { if ( $boxstarterDebug ) {Break} }
+$headerMessageWidth=120
+$headerMessage="$('=' * $headerMessageWidth)`n=$(' ' * (($headerMessageWidth - $("{0}".Length))/2)) {0} $(' ' * (($headerMessageWidth - $("{0}".Length))/2))=`n$('=' * $headerMessageWidth)`n"
+Write-Host -Object ($headerMessage -f $MyInvocation.MyCommand.Name) -ForegroundColor Magenta
 
-[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { $null })
+$debuggerAction = { 
+    if ( $boxstarterDebug ) {
+        Break
+    } 
+} # kudos https://petri.com/conditional-breakpoints-in-powershell/
+Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction
+
+[bool]$boxstarterDebug=$env:boxstarterdebug -eq "true"
+[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
 
 if (<#$pp['debug']#> $boxstarterDebug) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
@@ -16,7 +25,6 @@ if (<#$pp['debug']#> $boxstarterDebug) {
 }
  
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
-Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
 $IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
 
 function _logMessage {
@@ -88,7 +96,7 @@ function _chocolatey-InstallOrUpdate {
             _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
         }
     }; 
-    Write-Host -Object ("$($packageId) v$(choco --version)") -ForegroundColor Cyan;
+    Write-Host -Object ("$($packageId) v$($packageList|Select-Object -ExpandProperty Version)") -ForegroundColor Cyan;
 }
 
 $RefreshEnvironment={

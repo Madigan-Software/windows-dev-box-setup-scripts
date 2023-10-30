@@ -4,6 +4,9 @@
 
 [CmdletBinding()]
 param()
+$headerMessageWidth=120
+$headerMessage="$('=' * $headerMessageWidth)`n=$(' ' * (($headerMessageWidth - $("{0}".Length))/2)) {0} $(' ' * (($headerMessageWidth - $("{0}".Length))/2))=`n$('=' * $headerMessageWidth)`n"
+Write-Host -Object ($headerMessage -f $MyInvocation.MyCommand.Name) -ForegroundColor Magenta
 
 $debuggerAction = { 
     if ( $boxstarterDebug ) {
@@ -11,8 +14,8 @@ $debuggerAction = {
     } 
 } # kudos https://petri.com/conditional-breakpoints-in-powershell/
 Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction
-[bool]$boxstarterDebug=$env:boxstarterdebug -eq "true"
 
+[bool]$boxstarterDebug=$env:boxstarterdebug -eq "true"
 [void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
 
 if (<#$pp['debug']#> $boxstarterDebug) {
@@ -105,8 +108,6 @@ function _chocolatey-InstallOrUpdate {
         }
     }; 
     Write-Host -Object ("$($packageId) v$($packageList|Select-Object -ExpandProperty Version)") -ForegroundColor Cyan;
-
-    Write-Host -Object ("$($packageId) v$(choco --version)") -ForegroundColor Cyan;
 }
 
 $RefreshEnvironment={
@@ -228,6 +229,11 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     #--- Setting up base DevEnvironment ---
     if ($boxstarterDebug) { Set-PSBreakpoint }
     executeScript "dev_app.ps1";
+
+
+    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
+    executeScript "__post_installationtasks.ps1";            
+
     if (Test-PendingReboot) { Invoke-Reboot }
 } catch {
     # Write-ChocolateyFailure $($MyInvocation.MyCommand.Name) $($_.Exception.ToString())
