@@ -2,15 +2,14 @@
 # Author: Microsoft
 # Common dev settings for desktop app development
 
+$invocationName=if ($MyInvocation.MyCommand.Name -eq 'executeScript') { $MyInvocation.BoundParameters['script'] } else { $MyInvocation.MyCommand.Name }
 $headerMessageWidth=120
-$headerMessage="$('=' * $headerMessageWidth)`n=$(' ' * (($headerMessageWidth - $("{0}".Length))/2)) {0} $(' ' * (($headerMessageWidth - $("{0}".Length))/2))=`n$('=' * $headerMessageWidth)`n"
-Write-Host -Object ($headerMessage -f $MyInvocation.MyCommand.Name) -ForegroundColor Magenta
+$headerMessageCenteredPosition=(($headerMessageWidth - $invocationName.Length -4) / 2)
+$headerMessage = "`n$('=' * $headerMessageWidth)`n=$(' ' * $headerMessageCenteredPosition) {0} $(' ' * $headerMessageCenteredPosition)=`n$('=' * $headerMessageWidth)"
+Write-Host -Object ($headerMessage -f $invocationName) -ForegroundColor Magenta
 
-$debuggerAction = { 
-    if ( $boxstarterDebug ) {
-        Break
-    } 
-} # kudos https://petri.com/conditional-breakpoints-in-powershell/
+$debuggerAction = { if ( $boxstarterDebug ) { Break } } # kudos https://petri.com/conditional-breakpoints-in-powershell/
+[void](Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction)
 Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction
 
 [bool]$boxstarterDebug=$env:boxstarterdebug -eq "true"
@@ -164,7 +163,6 @@ try {
     }
     
     #--- Setting up Windows ---
-    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     executeScript "SystemConfiguration.ps1";
     executeScript "FileExplorerSettings.ps1";
     executeScript "RemoveDefaultApps.ps1";
@@ -192,7 +190,6 @@ try {
         choco install -y $PackageId --package-parameters="'--add Microsoft.VisualStudio.Component.Git' '--add Microsoft.Net.Component.4.7.2.TargetingPack' '-add Microsoft.Net.Component.4.7.2.SDK' '--add Microsoft.Net.Component.4.7.1.TargetingPack' '-add Microsoft.Net.Component.4.7.1.SDK'"
     }
 
-    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     Update-SessionEnvironment #refreshing env due to Git install
     
     #--- UWP Workload and installing Windows Template Studio ---
@@ -268,7 +265,6 @@ try {
         choco install -y $PackageId
     }
     
-    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     #executeScript "WindowsTemplateStudio.ps1";
     #executeScript "GetUwpSamplesOffGithub.ps1";
 } catch {

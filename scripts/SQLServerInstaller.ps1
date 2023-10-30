@@ -1,13 +1,14 @@
-$headerMessageWidth=120
-$headerMessage="$('=' * $headerMessageWidth)`n=$(' ' * (($headerMessageWidth - $("{0}".Length))/2)) {0} $(' ' * (($headerMessageWidth - $("{0}".Length))/2))=`n$('=' * $headerMessageWidth)`n"
-Write-Host -Object ($headerMessage -f $MyInvocation.MyCommand.Name) -ForegroundColor Magenta
-
-[Diagnostics.CodeAnalysis.SuppressMessage("PSUseApprovedVerbs", Scope="function", Target="Using-Object", Justification="Wrapping dispose pattern")]
 [CmdletBinding()]
 param(
     [Parameter()][ValidateSet('2019','2022')][string]$Version='2022'
    ,[Parameter()][ValidateSet('dev')][string]$Sku='dev'
 )
+
+$invocationName=if ($MyInvocation.MyCommand.Name -eq 'executeScript') { $MyInvocation.BoundParameters['script'] } else { $MyInvocation.MyCommand.Name }
+$headerMessageWidth=120
+$headerMessageCenteredPosition=(($headerMessageWidth - $invocationName.Length -4) / 2)
+$headerMessage = "`n$('=' * $headerMessageWidth)`n=$(' ' * $headerMessageCenteredPosition) {0} $(' ' * $headerMessageCenteredPosition)=`n$('=' * $headerMessageWidth)"
+Write-Host -Object ($headerMessage -f $invocationName) -ForegroundColor Magenta
 
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
 
@@ -37,11 +38,10 @@ try {
     $onLinePackageList=$(choco search "$($PackageId)" --yes --limit-output --exact|Where-Object { $_ -match ("$($PackageId)") }|ForEach-Object { [PSCustomObject]@{ Version=$($_ -split '\|'|Select-Object -Last 1) -as [System.Version];Id=$($_ -split '\|'|Select-Object -First 1) -as [string]; } })
     if ($null -eq $onLinePackageList) { $onLinePackageList = [PSCustomObject]@{ Version = -1 -as [System.Version];Id=$PackageId; } }
     $result=$(Compare-Object -ReferenceObject $packageList -DifferenceObject $onLinePackageList -Property Id,Version -PassThru|Select-Object -Property * -ErrorAction SilentlyContinue|Where-Object { $_.SideIndicator -match '^(\=\>)$' })
-    $result
-    # if (!($result -and $($result.SideIndicator|Where-Object { $_.SideIndicator -match '^(\=\>|\<\=)$' }))) {
-    #     _logMessage -Message "$($PackageId): $(if ($null -ne $onLinePackageList.Version) { "Already installed" } else { "Does not exist please check chocolatey https://community.chocolatey.org/packages?q=id%3A$($PackageId)" })" -ForegroundColor Yellow
-    #     return
-    # }
+    if (!($result -and $($result|Where-Object { $_.SideIndicator -match '^(\=\>|\<\=)$' }))) {
+        _logMessage -Message "$($PackageId): $(if ($null -ne $onLinePackageList.Version) { "Already installed" } else { "Does not exist please check chocolatey https://community.chocolatey.org/packages?q=id%3A$($PackageId)" })" -ForegroundColor Yellow
+        return
+    }
 
     $sqlSAPwd=if (([Environment]::GetEnvironmentVariable("choco:sqlserver$($Version):SAPWD"))) { ([Environment]::GetEnvironmentVariable("choco:sqlserver$($Version):SAPWD","User")) } else { ([Net.NetworkCredential]::new('', (Read-Host -Prompt 'Enter SQL Servwr SA password' -AsSecureString)).Password) }
     @('User','Process')|ForEach-Object {
@@ -118,6 +118,7 @@ try {
 *                                               P o s t   I n s t a l l                                               *
 ========================================================================================================================
 "@ -ForegroundColor DarkYellow
+    #[Diagnostics.CodeAnalysis.SuppressMessage("PSUseApprovedVerbs", Scope="function", Target="Using-Object", Justification="Wrapping dispose pattern")]
     function Using-Object
     {
         [CmdletBinding()]

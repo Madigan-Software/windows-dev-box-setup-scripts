@@ -4,19 +4,24 @@
 
 [CmdletBinding()]
 param()
-$headerMessageWidth=120
-$headerMessage="$('=' * $headerMessageWidth)`n=$(' ' * (($headerMessageWidth - $("{0}".Length))/2)) {0} $(' ' * (($headerMessageWidth - $("{0}".Length))/2))=`n$('=' * $headerMessageWidth)`n"
-Write-Host -Object ($headerMessage -f $MyInvocation.MyCommand.Name) -ForegroundColor Magenta
 
-$debuggerAction = { 
-    if ( $boxstarterDebug ) {
-        Break
-    } 
-} # kudos https://petri.com/conditional-breakpoints-in-powershell/
-Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction
+$invocationName=if ($MyInvocation.MyCommand.Name -eq 'executeScript') { $MyInvocation.BoundParameters['script'] } else { $MyInvocation.MyCommand.Name }
+$headerMessageWidth=120
+$headerMessageCenteredPosition=(($headerMessageWidth - $invocationName.Length -4) / 2)
+$headerMessage = "`n$('=' * $headerMessageWidth)`n=$(' ' * $headerMessageCenteredPosition) {0} $(' ' * $headerMessageCenteredPosition)=`n$('=' * $headerMessageWidth)"
+Write-Host -Object ($headerMessage -f $invocationName) -ForegroundColor Magenta
+
+$debuggerAction = { if ( $boxstarterDebug ) { Break } } # kudos https://petri.com/conditional-breakpoints-in-powershell/
+[void](Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction)
 
 [bool]$boxstarterDebug=$env:boxstarterdebug -eq "true"
+if ($boxstarterDebug) {
+    [void](Set-PSBreakpoint -Command "Invoke-Expression")
+    # [void](Set-PSBreakpoint -Command "executeScript")
+    # [void](Set-PSBreakpoint -Command "_chocolatey-InstallOrUpdate")
+}
 [void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
+& { "Testing Breakpoint is hit" }
 
 if (<#$pp['debug']#> $boxstarterDebug) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
@@ -48,7 +53,6 @@ function _logMessage {
         "$(if ($useBoxstarterMessage) { 'color' } else { 'ForegroundColor' })"=$ForegroundColor;
     }
 
-    if ($useBoxstarterMessage) { Write-BoxstarterMessage @commandParams } else { Write-Host @commandParams }
     if ($useBoxstarterMessage) { Write-BoxstarterMessage @commandParams } else { Write-Host @commandParams }
 }
 
@@ -137,7 +141,6 @@ try {
     Disable-MicrosoftUpdate
     Disable-UAC
 
-    if ($boxstarterDebug) { Set-PSBreakpoint }
     if (!$IsVirtual) {
         Invoke-ExternalCommand -Command { 
             #region helper
@@ -199,11 +202,11 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
         #$invocationPath = $scriptInvovcation.InvocationName # invocation relative to `$PWD
 
         _logMessage -Message "executing $helperUri/$script ..."
-        Invoke-Expression ((new-object net.webclient).DownloadString("$helperUri/$script"))
+        $expression=((new-object net.webclient).DownloadString("$helperUri/$script"))
+        Invoke-Expression $expression
     }
     
     #--- Setting up Windows OS ---
-    if ($boxstarterDebug) { Set-PSBreakpoint }
     #executeScript "scripts/WinGetInstaller.ps1"
     #executeScript "scripts/WindowsOptionalFeatures.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
@@ -222,16 +225,12 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     }
     
     #--- Setting up SQL Server ---
-    if ($boxstarterDebug) { Set-PSBreakpoint }
     executeScript "scripts/SQLServerInstaller.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
 
     #--- Setting up base DevEnvironment ---
-    if ($boxstarterDebug) { Set-PSBreakpoint }
     executeScript "dev_app.ps1";
 
-
-    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     executeScript "__post_installationtasks.ps1";            
 
     if (Test-PendingReboot) { Invoke-Reboot }
@@ -251,6 +250,6 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     $_message=$_message.Replace("- Start ","- End ")
     _logMessage -Message $_message -ForegroundColor Cyan
 
-    $webLauncherUrl=https://dev.azure.com/FrFl-Development/Evolve
+    $webLauncherUrl="https://dev.azure.com/FrFl-Development/Evolve"
     Start-Process microsoft-edge:$webLauncherUrl
 }

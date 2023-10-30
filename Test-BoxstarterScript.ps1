@@ -71,7 +71,7 @@ $Boxstarter.RebootOk=$true
 #[void]($result=Install-BoxstarterPackage -PackageName $ScriptPath -KeepWindowOpen -StopOnPackageFailure -Credential $(Get-Credential -Message "Credential for boxstarter" -UserName $env:USERNAME))
 try {
     $env:boxstarterdebug="true";
-    [void]($result=Install-BoxstarterPackage -PackageName C:\data\tfs\git\Sandbox\windows-dev-box-setup-scripts\WORK_DeveloperMachineInstall.ps1 -DisableReboots -KeepWindowOpen -DisableRestart -StopOnPackageFailure)
+    [void]($result=Install-BoxstarterPackage -PackageName (Join-Path -Path $PSScriptRoot -ChildPath "WORK_DeveloperMachineInstall.ps1") -DisableReboots -KeepWindowOpen -DisableRestart -StopOnPackageFailure)
 }
 finally {
     [void](Remove-Item -Path env:boxstarterdebug -Force -ErrorAction SilentlyContinue)
