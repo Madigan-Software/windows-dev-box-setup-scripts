@@ -5,7 +5,12 @@
 [CmdletBinding()]
 param()
 
-if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
+$boxstarterDebug=$env:boxstarterdebug -eq "true"
+$debuggerAction = { if ( $boxstarterDebug ) {Break} } # kudos https://petri.com/conditional-breakpoints-in-powershell/
+
+[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { $null })
+
+if (<#$pp['debug']#> $boxstarterDebug) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
     Write-Host "Debug was passed in as a parameter"
     Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
@@ -14,6 +19,7 @@ if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
 }
  
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
 $IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
 
 function _logMessage {
@@ -122,57 +128,58 @@ try {
     Disable-MicrosoftUpdate
     Disable-UAC
 
+    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     if (!$IsVirtual) {
-    Invoke-ExternalCommand -Command { 
-        #region helper
-        $_setFeatureState={
-            [CmdletBinding()]
-            param (
-                [Parameter()]$Feature
-               ,[Parameter()][ValidateSet('enable','disable')][string]$TargetState
-            )
-            if ($Feature.State -notmatch "^$($TargetState).*$") { 
-                choco feature $TargetState.ToString().ToLower() --name="'$($Feature.Id.ToString().Trim())'"
+        Invoke-ExternalCommand -Command { 
+            #region helper
+            $_setFeatureState={
+                [CmdletBinding()]
+                param (
+                    [Parameter()]$Feature
+                ,[Parameter()][ValidateSet('enable','disable')][string]$TargetState
+                )
+                if ($Feature.State -notmatch "^$($TargetState).*$") { 
+                    choco feature $TargetState.ToString().ToLower() --name="'$($Feature.Id.ToString().Trim())'"
+                }
+            }
+            #endregion helper
+            [array]$featureList=$(choco feature --limit-output|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Skip 1 -First 1) -as [string] }; N='State'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [string] }; N='Description'; })
+            $enabledList = $featureList|Where-Object { $_.Id -match "^(allowEmptyChecksumsSecure|autoUninstaller|checksumFiles|ignoreInvalidOptionsSwitches|logValidationResultsOnWarnings|powershellHost|showDownloadProgress|showNonElevatedWarnings|usePackageExitCodes|usePackageRepositoryOptimizations)$" }
+            $disabledList = $featureList|Where-Object { $_.Id -notin $enabledList.Id}
+            $disabledList|Foreach-Object {
+                &$_setFeatureState -Feature $_ -TargetState 'disable'
+            }
+            $enabledList|Foreach-Object {
+                &$_setFeatureState -Feature $_ -TargetState 'enable'
             }
         }
-        #endregion helper
-        [array]$featureList=$(choco feature --limit-output|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Skip 1 -First 1) -as [string] }; N='State'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [string] }; N='Description'; })
-        $enabledList = $featureList|Where-Object { $_.Id -match "^(allowEmptyChecksumsSecure|autoUninstaller|checksumFiles|ignoreInvalidOptionsSwitches|logValidationResultsOnWarnings|powershellHost|showDownloadProgress|showNonElevatedWarnings|usePackageExitCodes|usePackageRepositoryOptimizations)$" }
-        $disabledList = $featureList|Where-Object { $_.Id -notin $enabledList.Id}
-        $disabledList|Foreach-Object {
-            &$_setFeatureState -Feature $_ -TargetState 'disable'
-        }
-        $enabledList|Foreach-Object {
-            &$_setFeatureState -Feature $_ -TargetState 'enable'
-        }
-    }
     }
     # Get the base URI path from the ScriptToCall value
     <#$Boxstarter['ScriptToCall']=@"
 Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter.Chocolatey\Boxstarter.Chocolatey.psd1) -global -DisableNameChecking; Invoke-ChocolateyBoxstarter -bootstrapPackage 'C:\data\tfs\git\Sandbox\windows-dev-box-setup-scripts\WORK_DeveloperMachineInstall.ps1' -DisableReboots -StopOnPackageFailure
 "@#>
     $bstrappackage = "-bootstrapPackage"
-    $helperUri = $Boxstarter['ScriptToCall']
-    _logMessage -Message "*** [001] - helper boxstarter.ScriptToCall is $($Boxstarter['ScriptToCall'])" -ForegroundColor Gray
-
     if (![string]::IsNullOrEmpty($Boxstarter['ScriptToCall'])) {
+        $helperUri = $Boxstarter['ScriptToCall']
         $strpos = $helperUri.IndexOf($bstrappackage)
         $helperUri = $helperUri.Substring($strpos + $bstrappackage.Length)
         $helperUri = $helperUri -replace ('(?:(\s+\-\w+)+)'), ''
         $helperUri = $helperUri.TrimStart("'", " ")
         $helperUri = $helperUri.TrimEnd("'", " ")
+
+        Write-Verbose -Message "uri is $($helperUri|Out-String)"
         [void]([System.Uri]::TryCreate($helperUri, [System.UriKind]::RelativeOrAbsolute, [ref]$helperUri));
-        #_logMessage -Message "*** [002] - $($helperUri|Out-String)" -ForegroundColor Gray
-        _logMessage -Message "*** [003] - $($helperUri.AbsolutePath)" -ForeGroundColor Magenta
+        Write-Verbose -Message "uri is $($helperUri|Out-String)"
+
         #$helperUri.Scheme -match '^file'; 
-        $helperUri = $helperUri.AbsoluteUri
+        $helperUri = $helperUri.AbsolutePath
         $helperUri = $helperUri.Substring(0, $helperUri.LastIndexOf("/"))
+        $helperUri = $helperUri -replace '(\\|/)$',''
         $helperUri += ""
     } else {
         $helperUri = (Join-Path -Path $PSScriptRoot -ChildPath '')
     }
     $helperUri = $helperUri -replace '(\\|/)$',''
-    _logMessage -Message "*** [004] - helper script base URI is $($helperUri)" -ForegroundColor Gray
     
     function executeScript {
         Param ([string]$script)
@@ -187,13 +194,12 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     }
     
     #--- Setting up Windows OS ---
-    _logMessage -Message "*** [005] - Setting up Windows OS" -ForegroundColor Gray
+    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     #executeScript "scripts/WinGetInstaller.ps1"
     #executeScript "scripts/WindowsOptionalFeatures.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
 
     #--- Setting up Common Folders ---
-    _logMessage -Message "*** [006] - Creating common folder structure" -ForegroundColor Gray
     $rootPath="C:\data\"
     @(
         "\sql\Backup\"
@@ -207,12 +213,12 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     }
     
     #--- Setting up SQL Server ---
-    _logMessage -Message "*** [007] - Setting up SQL Server" -ForegroundColor Gray
+    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     executeScript "scripts/SQLServerInstaller.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
 
     #--- Setting up base DevEnvironment ---
-    _logMessage -Message "*** [008] - Developer Tools" -ForegroundColor Gray
+    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     executeScript "dev_app.ps1";
     if (Test-PendingReboot) { Invoke-Reboot }
 } catch {

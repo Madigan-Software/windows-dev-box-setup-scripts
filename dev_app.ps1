@@ -2,7 +2,12 @@
 # Author: Microsoft
 # Common dev settings for desktop app development
 
-if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
+$boxstarterDebug=$env:boxstarterdebug -eq "true"
+$debuggerAction = { if ( $boxstarterDebug ) {Break} }
+
+[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { $null })
+
+if (<#$pp['debug']#> $boxstarterDebug) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
     Write-Host "Debug was passed in as a parameter"
     Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
@@ -11,6 +16,7 @@ if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
 }
  
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
 $IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
 
 function _logMessage {
@@ -150,6 +156,7 @@ try {
     }
     
     #--- Setting up Windows ---
+    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     executeScript "SystemConfiguration.ps1";
     executeScript "FileExplorerSettings.ps1";
     executeScript "RemoveDefaultApps.ps1";
@@ -177,6 +184,7 @@ try {
         choco install -y $PackageId --package-parameters="'--add Microsoft.VisualStudio.Component.Git' '--add Microsoft.Net.Component.4.7.2.TargetingPack' '-add Microsoft.Net.Component.4.7.2.SDK' '--add Microsoft.Net.Component.4.7.1.TargetingPack' '-add Microsoft.Net.Component.4.7.1.SDK'"
     }
 
+    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     Update-SessionEnvironment #refreshing env due to Git install
     
     #--- UWP Workload and installing Windows Template Studio ---
@@ -252,16 +260,10 @@ try {
         choco install -y $PackageId
     }
     
+    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     #executeScript "WindowsTemplateStudio.ps1";
     #executeScript "GetUwpSamplesOffGithub.ps1";
-    if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
-        $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
-        Write-Host "Debug was passed in as a parameter"
-        Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
-        Write-Host "Debug-Runspace -Id $($runspace.id)"
-        Wait-Debugger
-    }
-     
+    Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
     executeScript "__post_installationtasks.ps1";            
 } catch {
     # Write-ChocolateyFailure $($MyInvocation.MyCommand.Name) $($_.Exception.ToString())

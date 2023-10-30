@@ -2,7 +2,12 @@
 # Author: Microsoft
 # Common settings for web development with NodeJS
 
-if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
+$boxstarterDebug=$env:boxstarterdebug -eq "true"
+$debuggerAction = { if ( $boxstarterDebug ) {Break} }
+
+[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { $null })
+
+if (<#$pp['debug']#> $boxstarterDebug) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
     Write-Host "Debug was passed in as a parameter"
     Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
@@ -11,6 +16,8 @@ if (<#$pp['debug']#> $env:boxstarterdebug -eq "true") {
 }
  
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+Set-PSBreakpoint -variable boxstarterDebug -Action $debuggerAction
+$IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
 
 function _logMessage {
     param(
