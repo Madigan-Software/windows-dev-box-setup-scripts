@@ -2,7 +2,9 @@
 # Author: Microsoft
 # Common dev settings for desktop app development
 
-$invocationName=if ($MyInvocation.MyCommand.Name -eq 'executeScript') { $MyInvocation.BoundParameters['script'] } else { $MyInvocation.MyCommand.Name }
+$invocation=$MyInvocation.PSObject.Copy()
+$invocationName=if ($invocation.MyCommand.Name -eq 'executeScript') { $invocation.BoundParameters['script'] } else { $invocation.MyCommand.Name }
+
 $headerMessageWidth=120
 $headerMessageCenteredPosition=(($headerMessageWidth - $invocationName.Length -4) / 2)
 $headerMessage = "`n$('=' * $headerMessageWidth)`n=$(' ' * $headerMessageCenteredPosition) {0} $(' ' * $headerMessageCenteredPosition)=`n$('=' * $headerMessageWidth)"
@@ -12,8 +14,8 @@ $debuggerAction = { if ( $boxstarterDebug ) { Break } } # kudos https://petri.co
 [void](Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction)
 
 [bool]$boxstarterDebug=$env:boxstarterdebug -eq "true"
-[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
 
+$IsDebuggerAttached = ((Test-Path Variable:PSDebugContext -ErrorAction SilentlyContinue) -eq $true)  # [System.Diagnostics.Debugger]::IsAttached
 if (<#$pp['debug']#> $boxstarterDebug) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
     Write-Host "Debug was passed in as a parameter"
@@ -193,4 +195,4 @@ try {
     Enable-MicrosoftUpdate
 }
 
-Install-WindowsUpdate -acceptEula
+Install-WindowsUpdate -AcceptEula

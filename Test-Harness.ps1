@@ -71,6 +71,7 @@ $Boxstarter.RebootOk=$true
 #[void]($result=Install-BoxstarterPackage -PackageName $ScriptPath -KeepWindowOpen -StopOnPackageFailure -Credential $(Get-Credential -Message "Credential for boxstarter" -UserName $env:USERNAME))
 try {
     [System.Environment]::SetEnvironmentVariable('BoxstarterDebug', 'true', [System.EnvironmentVariableTarget]::Process);
+    $env:BoxstarterDebug = [System.Environment]::GetEnvironmentVariable('BoxstarterDebug', [System.EnvironmentVariableTarget]::Process);
 
     [void]($result=Install-BoxstarterPackage -PackageName C:\data\tfs\git\Sandbox\windows-dev-box-setup-scripts\WORK_DeveloperMachineInstall.ps1 -DisableReboots -KeepWindowOpen -DisableRestart -StopOnPackageFailure)
 }

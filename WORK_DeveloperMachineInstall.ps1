@@ -5,7 +5,9 @@
 [CmdletBinding()]
 param()
 
-$invocationName=if ($MyInvocation.MyCommand.Name -eq 'executeScript') { $MyInvocation.BoundParameters['script'] } else { $MyInvocation.MyCommand.Name }
+$invocation=$MyInvocation.PSObject.Copy()
+$invocationName=if ($invocation.MyCommand.Name -eq 'executeScript') { $invocation.BoundParameters['script'] } else { $invocation.MyCommand.Name }
+
 $headerMessageWidth=120
 $headerMessageCenteredPosition=(($headerMessageWidth - $invocationName.Length -4) / 2)
 $headerMessage = "`n$('=' * $headerMessageWidth)`n=$(' ' * $headerMessageCenteredPosition) {0} $(' ' * $headerMessageCenteredPosition)=`n$('=' * $headerMessageWidth)"
@@ -15,14 +17,9 @@ $debuggerAction = { if ( $boxstarterDebug ) { Break } } # kudos https://petri.co
 [void](Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction)
 
 [bool]$boxstarterDebug=$env:boxstarterdebug -eq "true"
-if ($boxstarterDebug) {
-    [void](Set-PSBreakpoint -Command "Invoke-Expression")
-    # [void](Set-PSBreakpoint -Command "executeScript")
-    # [void](Set-PSBreakpoint -Command "_chocolatey-InstallOrUpdate")
-}
-[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
 
-if (<#$pp['debug']#> $boxstarterDebug) {
+$IsDebuggerAttached = ((Test-Path Variable:PSDebugContext -ErrorAction SilentlyContinue) -eq $true)  # [System.Diagnostics.Debugger]::IsAttached
+if (<#$pp['debug']#> $boxstarterDebug -and !$IsDebuggerAttached) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
     Write-Host "Debug was passed in as a parameter"
     Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
@@ -30,9 +27,89 @@ if (<#$pp['debug']#> $boxstarterDebug) {
     Wait-Debugger
 }
  
+if ($boxstarterDebug -and $IsDebuggerAttached) {
+    $params = @{ }
+    if ($invocation.MyCommand.CommandType -eq 'ExternalScript' -and $null -ne $invocation.MyCommand.Source) {$params.Add('Script',  $invocation.MyCommand.Source)}
+    foreach ($command in @(
+        #"Invoke-Expression",
+        "executeScript",
+        "_chocolatey-InstallOrUpdate"
+    )) {
+        $params.Command = $command
+        [void](Set-PSBreakpoint @params)
+    }
+
+    $params = @{ }
+    foreach ($command in @(
+        "choco",
+        "Call-Chocolatey",
+        #"Invoke-Expression",
+        # "executeScript",
+        # "_chocolatey-InstallOrUpdate",
+        "Invoke-ExternalCommand",
+        "Install-Prerequisite",
+        "ExitWithDelay"
+    )) {
+        $params.Command = $command
+        [void](Set-PSBreakpoint @params)
+    }
+
+    [void](Set-PSBreakpoint -Command "Invoke-ExternalCommand")
+}
+[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
+
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
 $IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
-[void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
+
+Function Set-PowerShellExitCode {
+    <#
+.SYNOPSIS
+Sets the exit code for the PowerShell scripts.
+
+.DESCRIPTION
+Sets the exit code as an environment variable that is checked and used
+as the exit code for the package at the end of the package script.
+
+.NOTES
+This tells PowerShell that it should prepare to shut down.
+
+.INPUTS
+None
+
+.OUTPUTS
+None
+
+.PARAMETER ExitCode
+The exit code to set.
+
+.PARAMETER IgnoredArguments
+Allows splatting with arguments that do not apply. Do not use directly.
+
+.EXAMPLE
+Set-PowerShellExitCode 3010
+    #>
+    param (
+        [parameter(Mandatory = $false, Position = 0)][int] $exitCode,
+        [parameter(ValueFromRemainingArguments = $true)][Object[]] $ignoredArguments
+    )
+
+    # Do not log function call - can mess things up
+
+    if ($exitCode -eq $null -or $exitCode -eq '') {
+        Write-Debug '$exitCode was passed null'
+        return
+    }
+
+    try {
+        $host.SetShouldExit($exitCode);
+    }
+    catch {
+        Write-Warning "Unable to set host exit code"
+    }
+
+    $LASTEXITCODE = $exitCode
+    $env:ChocolateyExitCode = $exitCode;
+}
 
 function _logMessage {
     param(
@@ -129,7 +206,7 @@ $RefreshEnvironment={
     #&$LogSeperator
 }
 
-$_message = "*** [$($MyInvocation.MyCommand.Name)] Setting up developer workstation - Start ***"
+$_message = "*** [$($invocation.MyCommand.Name)] Setting up developer workstation - Start ***"
 try {
     _logMessage -Message $_message
     if (((choco --version) -as [System.Version]) -lt [System.Version]("2.2.2")) { 
@@ -141,29 +218,27 @@ try {
     Disable-MicrosoftUpdate
     Disable-UAC
 
-    if (!$IsVirtual) {
-        Invoke-ExternalCommand -Command { 
-            #region helper
-            $_setFeatureState={
-                [CmdletBinding()]
-                param (
-                    [Parameter()]$Feature
-                ,[Parameter()][ValidateSet('enable','disable')][string]$TargetState
-                )
-                if ($Feature.State -notmatch "^$($TargetState).*$") { 
-                    choco feature $TargetState.ToString().ToLower() --name="'$($Feature.Id.ToString().Trim())'"
-                }
+    Invoke-ExternalCommand -Command { 
+        #region helper
+        $_setFeatureState={
+            [CmdletBinding()]
+            param (
+                [Parameter()]$Feature
+            ,[Parameter()][ValidateSet('enable','disable')][string]$TargetState
+            )
+            if ($Feature.State -notmatch "^$($TargetState).*$") { 
+                choco feature $TargetState.ToString().ToLower() --name="'$($Feature.Id.ToString().Trim())'"
             }
-            #endregion helper
-            [array]$featureList=$(choco feature --limit-output|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Skip 1 -First 1) -as [string] }; N='State'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [string] }; N='Description'; })
-            $enabledList = $featureList|Where-Object { $_.Id -match "^(allowEmptyChecksumsSecure|autoUninstaller|checksumFiles|ignoreInvalidOptionsSwitches|logValidationResultsOnWarnings|powershellHost|showDownloadProgress|showNonElevatedWarnings|usePackageExitCodes|usePackageRepositoryOptimizations)$" }
-            $disabledList = $featureList|Where-Object { $_.Id -notin $enabledList.Id}
-            $disabledList|Foreach-Object {
-                &$_setFeatureState -Feature $_ -TargetState 'disable'
-            }
-            $enabledList|Foreach-Object {
-                &$_setFeatureState -Feature $_ -TargetState 'enable'
-            }
+        }
+        #endregion helper
+        [array]$featureList=$(choco feature --limit-output|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Skip 1 -First 1) -as [string] }; N='State'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [string] }; N='Description'; })
+        $enabledList = $featureList|Where-Object { $_.Id -match "^(allowEmptyChecksumsSecure|autoUninstaller|checksumFiles|ignoreInvalidOptionsSwitches|logValidationResultsOnWarnings|powershellHost|showDownloadProgress|showNonElevatedWarnings|usePackageExitCodes|usePackageRepositoryOptimizations)$" }
+        $disabledList = $featureList|Where-Object { $_.Id -notin $enabledList.Id}
+        $disabledList|Foreach-Object {
+            &$_setFeatureState -Feature $_ -TargetState 'disable'
+        }
+        $enabledList|Foreach-Object {
+            &$_setFeatureState -Feature $_ -TargetState 'enable'
         }
     }
     # Get the base URI path from the ScriptToCall value
@@ -204,12 +279,14 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
         _logMessage -Message "executing $helperUri/$script ..."
         $expression=((new-object net.webclient).DownloadString("$helperUri/$script"))
         Invoke-Expression $expression
+        if (Test-PendingReboot) { Invoke-Reboot }
     }
     
     #--- Setting up Windows OS ---
     executeScript "scripts/WinGetInstaller.ps1"
-    executeScript "scripts/WindowsOptionalFeatures.ps1"
-    if (Test-PendingReboot) { Invoke-Reboot }
+    if (!$IsVirtual) {
+        executeScript "scripts/WindowsOptionalFeatures.ps1"
+    }
 
     #--- Setting up Common Folders ---
     $rootPath="C:\data\"
@@ -221,26 +298,26 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
         ,"\tfs\git\"
         ,"\tfs\git\Sandbox"
     ) | Foreach-Object {
+        _logMessage -Message "Creating folder $($rootPath)$($_) ..."
         [void](New-Item -Path "$($rootPath)$($_)" -Type Directory -Force -ErrorAction SilentlyContinue)
     }
     
     #--- Setting up SQL Server ---
     executeScript "scripts/SQLServerInstaller.ps1"
-    if (Test-PendingReboot) { Invoke-Reboot }
 
     #--- Setting up base DevEnvironment ---
     executeScript "dev_app.ps1";
 
     executeScript "__post_installationtasks.ps1";            
-
-    if (Test-PendingReboot) { Invoke-Reboot }
 } catch {
-    # Write-ChocolateyFailure $($MyInvocation.MyCommand.Name) $($_.Exception.ToString())
+    # Write-ChocolateyFailure $($invocation.MyCommand.Name) $($_.Exception.ToString())
     $formatstring = "{0} : {1}`n{2}`n" +
                     "    + CategoryInfo          : {3}`n" +
                     "    + FullyQualifiedErrorId : {4}`n"
     $fields = $_.InvocationInfo.MyCommand.Name,$_.ErrorDetails.Message,$_.InvocationInfo.PositionMessage,$_.CategoryInfo.ToString(), $_.FullyQualifiedErrorId
     Write-Host -Object ($formatstring -f $fields) -ForegroundColor Red -BackgroundColor Black
+    
+    Set-PowerShellExitCode -exitCode -1
     throw (New-Object System.Exception(($formatstring -f $fields), $_.Exception))
 } finally {
     #--- reenabling critial items ---
@@ -249,7 +326,8 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
 
     $_message=$_message.Replace("- Start ","- End ")
     _logMessage -Message $_message -ForegroundColor Cyan
-
-    $webLauncherUrl="https://dev.azure.com/FrFl-Development/Evolve"
-    Start-Process microsoft-edge:$webLauncherUrl
 }
+
+# Install-WindowsUpdate -AcceptEula #-GetUpdatesFromMS
+$webLauncherUrl="https://dev.azure.com/FrFl-Development/Evolve"
+Start-Process microsoft-edge:$webLauncherUrl
