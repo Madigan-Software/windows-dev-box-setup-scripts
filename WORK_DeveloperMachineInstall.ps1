@@ -21,7 +21,6 @@ if ($boxstarterDebug) {
     # [void](Set-PSBreakpoint -Command "_chocolatey-InstallOrUpdate")
 }
 [void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
-& { "Testing Breakpoint is hit" }
 
 if (<#$pp['debug']#> $boxstarterDebug) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
@@ -108,7 +107,8 @@ function _chocolatey-InstallOrUpdate {
             if (![string]::IsNullOrWhiteSpace($PackageParameters)) { $chocoParameters += $('--package-parameters="{0}"' -f $PackageParameters) }
             if (![string]::IsNullOrWhiteSpace($Source)) { $chocoParameters += $('--source="{0}"' -f $Source) }
             choco @chocoParameters
-            _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
+            _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray
+            if (!($? -or $LASTEXITCODE -eq 0)) { throw "Error occurred upgrading $($packageId) - $($LASTEXITCODE)" }
         }
     }; 
     Write-Host -Object ("$($packageId) v$($packageList|Select-Object -ExpandProperty Version)") -ForegroundColor Cyan;
@@ -207,8 +207,8 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     }
     
     #--- Setting up Windows OS ---
-    #executeScript "scripts/WinGetInstaller.ps1"
-    #executeScript "scripts/WindowsOptionalFeatures.ps1"
+    executeScript "scripts/WinGetInstaller.ps1"
+    executeScript "scripts/WindowsOptionalFeatures.ps1"
     if (Test-PendingReboot) { Invoke-Reboot }
 
     #--- Setting up Common Folders ---

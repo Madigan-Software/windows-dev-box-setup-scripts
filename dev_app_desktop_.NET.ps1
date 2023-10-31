@@ -77,13 +77,14 @@ function _chocolatey-InstallOrUpdate {
        ,[Parameter()][string]$Source=""
     )
 
-    [array]$remotePackageList=$(choco search $PackageId --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
     if ($null -eq $(Get-Command -Name choco)) {
         throw "Chocolatey is not installed, unable to continue"
         Exit 1
     }
 
+    [array]$remotePackageList=$(choco search $PackageId --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
     $remotePackageListVersion = ($remotePackageList.Version|Measure-Object -Maximum).Maximum
+
     [array]$packageList=$(choco list $PackageId --local-only --limit-output --exact|Select-Object @{ E={ ($_.Split('|')|Select-Object -First 1) -as [string] }; N='Id'; }, @{ E={ ($_.Split('|')|Select-Object -Last 1) -as [System.Version] }; N='Version'; })
     $packageInstalledVersion=if ($PackageId -eq 'chocolatey') { $(@(($(choco --version) -as [Version]), $packageList.Version)|Measure-Object -Maximum).Maximum } else { $($packageList.Version|Measure-Object -Maximum).Maximum }
 
@@ -98,7 +99,8 @@ function _chocolatey-InstallOrUpdate {
             if (![string]::IsNullOrWhiteSpace($PackageParameters)) { $chocoParameters += $('--package-parameters="{0}"' -f $PackageParameters) }
             if (![string]::IsNullOrWhiteSpace($Source)) { $chocoParameters += $('--source="{0}"' -f $Source) }
             choco @chocoParameters
-            _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray    
+            _logMessage -Message "RC: $($?) - LEC: $($LASTEXITCODE)" -ForegroundColor Gray
+            if (!($? -or $LASTEXITCODE -eq 0)) { throw "Error occurred upgrading $($packageId) - $($LASTEXITCODE)" }
         }
     }; 
     Write-Host -Object ("$($packageId) v$($packageList|Select-Object -ExpandProperty Version)") -ForegroundColor Cyan;
