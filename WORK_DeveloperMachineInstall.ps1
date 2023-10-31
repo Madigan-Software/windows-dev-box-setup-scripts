@@ -59,7 +59,15 @@ if ($boxstarterDebug -and $IsDebuggerAttached) {
 [void]($pp=if ((Get-Process -Id $pid).ProcessName -match 'choco') { Get-PackageParameters } else { ${ } })
 
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
+
 $IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
+$IsWindowsSandbox = {
+    return (
+        $env:UserName -eq 'WDAGUtilityAccount' -and
+        (Get-Service -Name cexecsvc).Status -eq 'Running' -and 
+        $(&$IsVirtual)
+    )
+}
 
 Function Set-PowerShellExitCode {
     <#
@@ -284,7 +292,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     
     #--- Setting up Windows OS ---
     executeScript "scripts/WinGetInstaller.ps1"
-    if (!$IsVirtual) {
+    if (!$IsWindowsSandbox) {
         executeScript "scripts/WindowsOptionalFeatures.ps1"
     }
 

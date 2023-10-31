@@ -28,7 +28,7 @@ function _IsMsSQLServerInstalled($serverInstance) {
     return $false
 }
 
-if (!$IsVirtual) {
+if (!$IsWindowsSandbox) {
     $_message = "*** [$($MyInvocation.MyCommand.Name)] Installing SQL Server $($Sku) $($Version) - Start ***"
 
     try {

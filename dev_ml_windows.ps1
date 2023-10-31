@@ -26,6 +26,13 @@ if (<#$pp['debug']#> $boxstarterDebug) {
  
 if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScriptRoot -Force }
 $IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
+$IsWindowsSandbox = {
+    return (
+        $env:UserName -eq 'WDAGUtilityAccount' -and
+        (Get-Service -Name cexecsvc).Status -eq 'Running' -and 
+        $(&$IsVirtual)
+    )
+}
 
 function _logMessage {
     param(
