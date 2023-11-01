@@ -1302,21 +1302,21 @@ Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlo
             & ".\CreateEvolveMSMQ.cmd"
         }
     }
+        
+    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig" -ScriptBlock {
+        Log-Action -Title 'DevEnvMigration' -NoHeader -ScriptBlock {
+            & ".\DevEnvMigration.bat"
+        }
+    }
 
     Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve" -ScriptBlock {
         Log-Action -Title 'Open and run the legacy Evolve.sln solution' -NoHeader -ScriptBlock {
-            Start-Process -FilePath "C:\Data\TFS\Git\Evolve\Evolve.sln" -Wait
+            Start-Process -FilePath ".\Evolve\Evolve.sln" -Wait
         }
         Log-Action -Title 'Access https://l-evolve/admin' -NoHeader -ScriptBlock {
 
             $webLauncherUrl="https://l-evolve/admin"
             Start-Process microsoft-edge:$webLauncherUrl -Wait
-        }
-    }
-
-    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig" -ScriptBlock {
-        Log-Action -Title 'DevEnvMigration' -NoHeader -ScriptBlock {
-            & ".\DevEnvMigration.bat"
         }
     }
 }
