@@ -13,21 +13,21 @@ $headerMessageCenteredPosition=(($headerMessageWidth - $invocationName.Length -4
 $headerMessage = "`n$('=' * $headerMessageWidth)`n=$(' ' * $headerMessageCenteredPosition) {0} $(' ' * $headerMessageCenteredPosition)=`n$('=' * $headerMessageWidth)"
 Write-Host -Object ($headerMessage -f $invocationName) -ForegroundColor Magenta
 
-$debuggerAction = { if ( $boxstarterDebug ) { Break } } # kudos https://petri.com/conditional-breakpoints-in-powershell/
-[void](Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction)
+$IsDebuggerAttached = { ((Test-Path Variable:PSDebugContext -ErrorAction SilentlyContinue) -eq $true) }  # [System.Diagnostics.Debugger]::IsAttached
 
 [bool]$boxstarterDebug=$env:boxstarterdebug -eq "true"
-
-$IsDebuggerAttached = ((Test-Path Variable:PSDebugContext -ErrorAction SilentlyContinue) -eq $true)  # [System.Diagnostics.Debugger]::IsAttached
-if (<#$pp['debug']#> $boxstarterDebug -and !$IsDebuggerAttached) {
+if (<#$pp['debug']#> $boxstarterDebug -and !(&$IsDebuggerAttached)) {
     $runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunSpace
     Write-Host "Debug was passed in as a parameter"
     Write-Host "To enter debugging write: Enter-PSHostProcess -Id $pid"
     Write-Host "Debug-Runspace -Id $($runspace.id)"
     Wait-Debugger
 }
+
+$debuggerAction = { if ( $boxstarterDebug ) { Break } } # kudos https://petri.com/conditional-breakpoints-in-powershell/
+[void](Set-PSBreakpoint -Variable boxstarterDebug -Mode ReadWrite -Action $debuggerAction)
  
-if ($boxstarterDebug -and $IsDebuggerAttached) {
+if ($boxstarterDebug -and (&$IsDebuggerAttached)) {
     $params = @{ }
     if ($invocation.MyCommand.CommandType -eq 'ExternalScript' -and $null -ne $invocation.MyCommand.Source) {$params.Add('Script',  $invocation.MyCommand.Source)}
     foreach ($command in @(
