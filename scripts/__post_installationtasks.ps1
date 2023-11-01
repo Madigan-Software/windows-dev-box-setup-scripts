@@ -241,6 +241,7 @@ function Invoke-CommandInPath {
     param (
         [Parameter(Mandatory)][scriptblock]$ScriptBlock
         , [Parameter(Mandatory)][string]$Path
+        , [Parameter()][switch]$Skip
     )
 
     try {
@@ -250,7 +251,11 @@ function Invoke-CommandInPath {
         }
 
         Push-Location $Path
-        & $ScriptBlock
+        if (!$Skip.IsPresent -or $Skip.ToBool() -eq $false) {
+            & $ScriptBlock
+        } else {
+            Write-Warning -Message "Skipping - Executing Command in $($Path)"
+        }
     }
     finally {
         Pop-Location
@@ -292,6 +297,7 @@ function Invoke-VSIXInstaller {
                     if ($s.ExitCode -gt 0) {
                         switch ($s.ExitCode) {
                             1001 { Write-Warning -Message "$($PackageName) is already installed" }
+                            2004 { Write-Warning -Message "***** => $($PackageName) may not be installed, check and install manually if it is missing <= *****" }
                             Default { throw "There was an error installing '$($PackageName)'. The exit code returned was $($s.ExitCode)." }
                         }
                     }
@@ -321,6 +327,7 @@ function Log-Action {
         , [Parameter()][string]$Title
         , [Parameter()][System.ConsoleColor]$ForegroundColor = [System.ConsoleColor]::Cyan
         , [Parameter()][switch]$NoHeader
+        , [Parameter()][switch]$Skip
     )
     
     begin {
@@ -357,7 +364,11 @@ function Log-Action {
     }
     
     process {
-        & $ScriptBlock
+        if (!$Skip.IsPresent -or $Skip.ToBool() -eq $false) {
+            &$ScriptBlock
+        } else {
+            Write-Warning -Message "Skipping - $($Title)"
+        }
     }
     
     end {
@@ -783,7 +794,7 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
     $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
     $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
 
-    $azureExtensions = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | ConvertFrom-Json | Select-Object -unique name, summary, version, installed, experimental, preview
+    [array]$azureExtensions = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | ConvertFrom-Json | Select-Object -unique name, summary, version, installed, experimental, preview
     if (($extensions -contains 'bicep')) {
         $bicepVersion = try {
             $functions = ''
@@ -803,10 +814,13 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
     $azureExtensions = $azureExtensions | Where-Object { $_.name -match ('({0})' -f $($extensions -join '|')) -and !$_.installed }
 
     #region install missing extensions
-    $azCliInstallCommands = ($($extensions | Where-Object { $_ -match ('({0})' -f $($azureExtensions.name -join '|')) } | ForEach-Object { @{ name = $_; summary = $null; version = '0.0.0'; installed = $false; experimental = $false; preview = $false; } })) | Where-Object { !$_.installed } | Select-Object -ExpandProperty name | ForEach-Object {
-        switch ($_) {
-            'bicep' { "az $($_) install" }
-            Default { "az extension add --name $($_)" }
+    $azCliInstallCommands = (($($extensions | Where-Object { $_ -match ('({0})' -f $($azureExtensions.name -join '|')) } | ForEach-Object { @{ name = $_; summary = $null; version = '0.0.0'; installed = $false; experimental = $false; preview = $false; } })) | Where-Object { 
+        !$_.installed 
+    }) | ForEach-Object {
+        $azComponent = $_
+        switch ($azComponent.name) {
+            'bicep' { "az $($azComponent.name) install" }
+            Default { "az extension add --name $($azComponent.name)" }
         }
     }
     $azCliInstall = [scriptblock]::Create(($azCliInstallCommands -join "`n"))
@@ -989,9 +1003,10 @@ Log-Action -Title 'TODO: SQL Server' -ForegroundColor Green -ScriptBlock {
         "
     }
 
-    Log-Action -Title "Give $($env:USERDOMAIN)\$($env:USERNAME) dbo access to Evolve* and DataRetention DB's" -ForegroundColor DarkYellow -NoHeader -ScriptBlock {
+    Log-Action -Title "Give $($env:USERDOMAIN)\$($env:USERNAME) dbo access to Evolve* and DataRetention DB's, Add Linked Server" -ForegroundColor DarkYellow -NoHeader -Skip -ScriptBlock {
         "
         Add $($env:USERDOMAIN)\$($env:USERNAME) user with dbo access to the Evolve....... DBs and DataRetention DB
+        Add a linked server object for DEV-SQL-APP01 called DEV-SQL-APP01 and configure Server Options->RPC Out to 'true'. Set Security to `"Be made with the login's current security context`"
         "
         function Using-Object {
             [CmdletBinding()]
@@ -1015,26 +1030,93 @@ Log-Action -Title 'TODO: SQL Server' -ForegroundColor Green -ScriptBlock {
                 $sqlConnection.Open()
                 $content = $null #Get-Content $scriptFileNameGoesHere
                 [void]($commandList.Add('
-                USE [master]; 
-                --IF NOT EXISTS (SELECT 1 FROM master.sys.server_principals WHERE [name] = N''{0}\{1}'' and [type] IN (''C'',''E'', ''G'', ''K'', ''S'', ''U'')) AND EXISTS (SELECT 1 FROM master.sys.server_principals WHERE [name] = N''sa'' and [type] IN (''C'',''E'', ''G'', ''K'', ''S'', ''U'')) BEGIN 
-                    DECLARE @sql NVARCHAR(MAX) =''''
-                    CREATE LOGIN [{0}\{1}] 
-                    FROM WINDOWS  
-                    WITH DEFAULT_DATABASE=[master]; ''''
-
-                    --EXEC sp_executesql @sql
-                --END
-                ' -f $($env:USERDOMAIN),$($env:USERNAME)))
-                <#
+                USE [master]
+                DECLARE @_WindowsUser sysname = ''{0}\{1}''
+                DECLARE @_sql NVARCHAR(MAX)
+                
+                --SELECT name FROM sys.sql_logins
+                IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE LOGIN ['' + @_WindowsUser + ''] FROM WINDOWS WITH DEFAULT_DATABASE=[master]''; EXEC sys.sp_executesql @stmt=@_sql; END
+                
+                BEGIN
+                    USE [DataRetention]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                
+                BEGIN 
+                    USE [EvolveApplication]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                
+                BEGIN
+                    USE [EvolveDealer]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                
+                BEGIN
+                    USE [EvolveDecision]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                
+                BEGIN
+                    USE [EvolvePayment]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                
+                BEGIN 
+                    USE [EvolveProjection]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                
+                BEGIN
+                    USE [EvolveSecurity]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                
+                BEGIN 
+                    USE [EvolveServices]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                
+                BEGIN
+                    USE [EvolveShared]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                
+                BEGIN
+                    USE [EvolveShared]
+                    if NOT EXISTS(SELECT * FROM sys.database_principals WHERE name = @_WindowsUser) BEGIN SET @_sql = N''CREATE USER ['' + @_WindowsUser + ''] FOR LOGIN ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql; END
+                    BEGIN SET @_sql = ''ALTER ROLE [db_owner] ADD MEMBER ['' + @_WindowsUser + '']''; EXEC sys.sp_executesql @stmt=@_sql END;
+                END
+                ' -f 'TEAM','Evolve'))
                 [void]($commandList.Add('
-                USE [DataRetention]; 
-                DECLARE @sql NVARCHAR(MAX) =''''
-                CREATE USER [{0}\{1}] FOR LOGIN [{0}\{1}] WITH DEFAULT_SCHEMA=[dbo]; 
-                EXEC sp_addrolemember N''db_datareader'', N''{0}\{1}'';
-
-                --EXEC sp_executesql @sql
-                ' -f $($env:USERDOMAIN),$($env:USERNAME)))
-                #>
+                USE [master]
+                BEGIN
+                    EXEC master.dbo.sp_addlinkedserver @server = N''{0}'', @srvproduct=N''SQL Server''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''collation compatible'', @optvalue=N''false''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''data access'', @optvalue=N''true''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''dist'', @optvalue=N''false''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''pub'', @optvalue=N''false''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''rpc'', @optvalue=N''false'' -- true in uat
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''rpc out'', @optvalue=N''true''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''sub'', @optvalue=N''false''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''connect timeout'', @optvalue=N''0''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''collation name'', @optvalue=null
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''lazy schema validation'', @optvalue=N''false''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''query timeout'', @optvalue=N''0''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''use remote collation'', @optvalue=N''true''
+                    EXEC master.dbo.sp_serveroption @server=N''{0}'', @optname=N''remote proc transaction promotion'', @optvalue=N''true''
+                    EXEC master.dbo.sp_addlinkedsrvlogin @rmtsrvname = N''{0}'', @locallogin = NULL , @useself = N''True''
+                END
+                ' -f 'DEV-SQL-APP01'))
                 $content|Where-Object {$null -ne $_} | Foreach-Object {
                     Write-Verbose -Message "[002.2]" -Verbose
                     $command=$_
@@ -1071,23 +1153,18 @@ Log-Action -Title 'TODO: SQL Server' -ForegroundColor Green -ScriptBlock {
     
     }
 
-    Log-Action -Title "Add a linked server object for DEV-SQL-APP01" -ForegroundColor DarkYellow -NoHeader -ScriptBlock {
-        "
-        Add a linked server object for DEV-SQL-APP01 called DEV-SQL-APP01 and configure Server Options->RPC Out to 'true'. Set Security to `"Be made with the login's current security context`"
-        "
-    }
-
     Log-Action -Title "Update your seeds to current" -ForegroundColor DarkYellow -NoHeader -ScriptBlock {
         "
         Update your seeds to current by:-
         Legacy DB - Running publish on all databases from the database project, or if too far out of date, run project to database compares for all the projects and manually update from the models.
-            "
+        "
     }
 }
 
 Log-Action -Title 'TODO: Microservices' -ForegroundColor Green -ScriptBlock {
     "
     Run 'update-database' for each from Nuget Package Manager console.
+    This may not be needed
     "
 }
 
@@ -1122,7 +1199,7 @@ Log-Action -Title 'Logging Distribution' -ScriptBlock {
         $loggingDistributerPath=(Get-ChildItem -Path . -file -Recurse -Filter FrFl.Service.LoggingDistributor.*proj|Select-Object -First 1)
         $devEnvParams = [ordered]@{
             "Rebuild"                                 = "`"Release`|AnyCPU`""
-            "Project"                                 = "`"$(Resolve-Path -Relative $loggingDistributerPath)`""
+            "Project"                                 = "`"$($loggingDistributerPath|Select-Object -ExpandProperty FullName|Resolve-Path -Relative)`""
             # "p:SkipInvalidConfigurations"           = 'true'
             # "p:GenerateProjectSpecificOutputFolder" = 'true'
             # "p:DeployOnBuild"                       = 'true'
@@ -1131,7 +1208,6 @@ Log-Action -Title 'Logging Distribution' -ScriptBlock {
             # "nodeReuse:false"                       = $null
             "Out"                                     = "`"$(Join-Path $env:TEMP -ChildPath "BuildLog.log")`""
         }
-
 
         git fetch --prune --all --quiet
         git pull --all --quiet
@@ -1186,14 +1262,14 @@ Log-Action -Title 'Logging Distribution' -ScriptBlock {
     }
 }
 
-exit 1
-Log-Action -Title 'Zeacom' -ForegroundColor Green -ScriptBlock {
+Log-Action -Title 'Zeacom' -ForegroundColor Green -Skip -ScriptBlock {
     "
     Manual Instructions 
     Open an administrator command prompt
     Execute C:\Program Files (x86)\Telephony\CTI\Bin\ZCom.exe /regserver
     "
-    Invoke-CommandInPath -Path "C:\Program Files (x86)\Telephony\CTI\Bin\" -ScriptBlock {
+    $path = Get-ChildItem -Path 'C:\Program Files (x86)\*','C:\Program Files\*' -Recurse -File -Include zcom.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
+    Invoke-CommandInPath -Path $path -Skip -ScriptBlock {
         Log-Action -Title 'Register Zecom Server' -NoHeader -ScriptBlock {
             ZCom.exe /regserver
         }
@@ -1203,15 +1279,46 @@ Log-Action -Title 'Zeacom' -ForegroundColor Green -ScriptBlock {
 Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlock {
     "
     Connect to the VPN if you arn't already
-    In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig>DevEnvMigration.bat
+    In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts\Utility>BuildMicroservices.bat
     In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts>CreateEventSources.bat
     In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts>CreateEvolveMSMQ.cmd
-    In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts\Utility>BuildMicroservices.bat
+    In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig>DevEnvMigration.bat
     In a admin PowerShell prompt execute set-executionpolicy Unrestricted
     Open and run the legacy Evolve.sln solution
     Access https://l-evolve/admin 
     You are good to go
     "
+    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\Utility" -ScriptBlock {
+        Log-Action -Title 'BuildMicroservices' -NoHeader -ScriptBlock {
+            & ".\BuildMicroservices.bat"
+        }
+    }
+
+    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts" -ScriptBlock {
+        Log-Action -Title 'CreateEventSources' -NoHeader -ScriptBlock {
+            & ".\CreateEventSources.bat"
+        }
+        Log-Action -Title 'CreateEvolveMSMQ' -NoHeader -ScriptBlock {
+            & ".\CreateEvolveMSMQ.cmd"
+        }
+    }
+
+    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve" -ScriptBlock {
+        Log-Action -Title 'Open and run the legacy Evolve.sln solution' -NoHeader -ScriptBlock {
+            Start-Process -FilePath "C:\Data\TFS\Git\Evolve\Evolve.sln" -Wait
+        }
+        Log-Action -Title 'Access https://l-evolve/admin' -NoHeader -ScriptBlock {
+
+            $webLauncherUrl="https://l-evolve/admin"
+            Start-Process microsoft-edge:$webLauncherUrl -Wait
+        }
+    }
+
+    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig" -ScriptBlock {
+        Log-Action -Title 'DevEnvMigration' -NoHeader -ScriptBlock {
+            & ".\DevEnvMigration.bat"
+        }
+    }
 }
 
 Log-Action -Title 'TODO: Website setup' -ForegroundColor Green -ScriptBlock {
