@@ -1251,6 +1251,13 @@ Log-Action -Title "Set Up SymbolicLinks to folders" -NoHeader -ScriptBlock {
     }
 }
 
+Log-Action -Title "Enable GodMode" -ScriptBlock {
+    $godModePath = "$($env:USERPROFILE)\Desktop\GodMode.{ED7BA470-8E54-465E-825C-99712043E01C}"
+    if (!(Test-Path -Path $godModePath)) {
+        [void](New-Item -ItemType Directory -Path $godModePath -Force -ErrorAction SilentlyContinue)
+    }
+}
+
 exit 0
 
 #endregion Main Logic
