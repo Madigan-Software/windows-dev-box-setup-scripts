@@ -1,3 +1,7 @@
+using namespace System.Management.Automation
+
+# $script:publicToExport.function += @('Add-ConsoleEnvVarPath')
+# $script:publicToExport.alias += @('Add-EnvVar')
 
 # Description: Boxstarter Script
 # Author: Cyril Madigan
@@ -19,11 +23,11 @@
 param (
     [Parameter()][ValidateScript({
         Test-Path -Path $_ 
-    })]
-    [string]
-    $ScriptPath='Madigan-Software/windows-dev-box-setup-scripts/WORK_DeveloperMachineInstall.ps1'
-)
-
+    })][string]$ScriptPath='Madigan-Software/windows-dev-box-setup-scripts/WORK_DeveloperMachineInstall.ps1'
+    ,[Parameter()][switch]$DebugEnabled
+    ,[Parameter()][switch]$Force
+    )
+        
 function PSCommandPath() { return $PSCommandPath }
 function ScriptName() { return $MyInvocation.ScriptName }
 function MyCommandName() { return $MyInvocation.MyCommand.Name }
@@ -70,10 +74,35 @@ $Boxstarter.RebootOk=$true
 # Start-Process http://boxstarter.org/package/url?https://raw.githubusercontent.com/Madigan-Software/windows-dev-box-setup-scripts/FRFL/WORK_DeveloperMachineInstall.ps1
 #[void]($result=Install-BoxstarterPackage -PackageName $ScriptPath -KeepWindowOpen -StopOnPackageFailure -Credential $(Get-Credential -Message "Credential for boxstarter" -UserName $env:USERNAME))
 try {
-    [System.Environment]::SetEnvironmentVariable('BoxstarterDebug', 'true', [System.EnvironmentVariableTarget]::Process);
+    if ($DebugEnabled.IsPresent -and $DebugEnabled.ToBool()) { [System.Environment]::SetEnvironmentVariable('BoxstarterDebug', $DebugEnabled.ToBool().ToString(), [System.EnvironmentVariableTarget]::Process); }
     $env:BoxstarterDebug = [System.Environment]::GetEnvironmentVariable('BoxstarterDebug', [System.EnvironmentVariableTarget]::Process);
 
-    [void]($result=Install-BoxstarterPackage -PackageName C:\data\tfs\git\Sandbox\windows-dev-box-setup-scripts\WORK_DeveloperMachineInstall.ps1 -DisableReboots -KeepWindowOpen -DisableRestart -StopOnPackageFailure)
+    try {
+        <##>
+        if (!(Test-Path $ScriptPath)) {
+            Write-Warning "Invalid Path: $ScriptPath"
+            if (! $Force ) {
+                $exception = [IO.FileNotFoundException]::new(
+                    <# message : #> "Filepath: ['$($ScriptPath)'] - does not exist",
+                    <# fileName: #> $ScriptPath
+                )
+                $errorRecord = [ErrorRecord]::new(
+                    <# exception    : #> $exception,
+                    <# errorId      : #> 'MissingTarget',
+                    <# errorCategory: #> [ErrorCategory]::InvalidArgument,
+                    <# targetObject : #> $null)
+        
+                $PSCmdlet.WriteError( <# errorRecord: #> $errorRecord )
+                # $PSCmdlet.ThrowTerminatingError($errorRecord)
+                throw $exception
+            }
+        }
+        <##>
+        [void]($result=Install-BoxstarterPackage -PackageName $ScriptPath -DisableReboots -KeepWindowOpen -DisableRestart -StopOnPackageFailure)
+    } catch [System.IO.FileNotFoundException] {
+        $ScriptPath=Join-Path -Path "$($PSScriptRoot)" -ChildPath "WORK_DeveloperMachineInstall.ps1"
+        [void]($result=Install-BoxstarterPackage -PackageName $ScriptPath -DisableReboots -KeepWindowOpen -DisableRestart -StopOnPackageFailure)
+    }
 }
 finally {
     [System.Environment]::SetEnvironmentVariable('BoxstarterDebug', $null, [System.EnvironmentVariableTarget]::Process);
@@ -82,4 +111,4 @@ finally {
 #"Result: $($result|Out-String)" 
 Exit $result
 
-#Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter.Chocolatey\Boxstarter.Chocolatey.psd1) -global -DisableNameChecking; Invoke-ChocolateyBoxstarter -bootstrapPackage 'C:\data\tfs\git\Sandbox\windows-dev-box-setup-scripts\WORK_DeveloperMachineInstall.ps1' -StopOnPackageFailure
+#Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter.Chocolatey\Boxstarter.Chocolatey.psd1) -global -DisableNameChecking; Invoke-ChocolateyBoxstarter -bootstrapPackage '$PSScriptRoot\WORK_DeveloperMachineInstall.ps1' -StopOnPackageFailure

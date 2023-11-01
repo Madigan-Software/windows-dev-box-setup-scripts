@@ -316,7 +316,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     #--- Setting up base DevEnvironment ---
     executeScript "dev_app.ps1";
 
-    executeScript "__post_installationtasks.ps1";            
+    executeScript "scripts/__post_installationtasks.ps1";            
 } catch {
     # Write-ChocolateyFailure $($invocation.MyCommand.Name) $($_.Exception.ToString())
     $formatstring = "{0} : {1}`n{2}`n" +
