@@ -1317,7 +1317,7 @@ Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlo
 
     Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig" -ScriptBlock {
         Log-Action -Title 'DevEnvMigration' -NoHeader -ScriptBlock {
-            & ".\DevEnvMigration.bat"
+            & ".\DevEnvMigration.bat" -InstallVSTemplate
         }
     }
 
