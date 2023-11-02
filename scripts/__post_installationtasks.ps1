@@ -187,7 +187,7 @@ function Create-SymbolicLink {
                 
             if ($symbolicLink.Backup.IsPresent -and $symbolicLink.Backup.ToBool() -eq $true) {
                 $backupTarget = "$($Target)-Backup-$($(New-Guid).Guid)"
-                [void]($result = Copy-Item -Path $symbolicLink.SymbolicLinkTarget -Destination $backupTarget -Recurse -Force -PassThru)
+                [void]($result = Copy-Item -Path $symbolicLink.SymbolicLinkTarget -Destination $backupTarget -Recurse -Confirm:$false -Force -PassThru)
                 
                 Write-Verbose -Message ($result | Out-String -Width 4095) -Verbose
             }
@@ -378,6 +378,72 @@ function Log-Action {
         }
     }
 } #end function
+
+function Build-SolutionOrProject {
+    [CmdletBinding()]
+    param (
+        [Parameter()][string]$SolutionPath
+       ,[Parameter()][string]$ProjectName
+    )
+
+    $path = (Get-Item -Path $SolutionPath -ErrorAction SilentlyContinue | Select-Object -ExpandProperty DirectoryName)
+    if ($null -eq $path) { Write-Warning -Message "Solution '$($SolutionPath)' not found"; return; }
+
+    Invoke-CommandInPath -Path $path -ScriptBlock {
+        $projectPath=(Get-ChildItem -Path . -file -Recurse -Filter "$($ProjectName).*proj"|Select-Object -First 1)
+        $devEnvParams = [ordered]@{
+            "Rebuild"                                 = "`"Release`|AnyCPU`""
+            # "p:SkipInvalidConfigurations"           = 'true'
+            # "p:GenerateProjectSpecificOutputFolder" = 'true'
+            # "p:DeployOnBuild"                       = 'true'
+            # "p:WebPublishMethod"                    = 'Package'
+            # #"p:OutDir"                             = "$(Build.BinariesDirectory)\"
+            # "nodeReuse:false"                       = $null
+            "Out"                                     = "`"$(Join-Path $env:TEMP -ChildPath "$((New-Guid).Guid).BuildLog.log")`""
+        }
+        if ($null -ne $projectPath) { $devEnvParams['Project'] = "`"$($projectPath|Select-Object -ExpandProperty FullName|Resolve-Path -Relative)`"" }
+
+        git fetch --prune --all --quiet
+        git pull --all --quiet
+
+        $buildCommands=@(
+            'Build'
+            'Clean'
+            'Deploy'
+            'Out'
+            'Project'
+            'ProjectConfig'
+            'Rebuild'
+            'Upgrade'
+        )
+        $devEnvParamsToString = "$(($devEnvParams.Keys|ForEach-Object { 
+            "-$($_)$(if ($null -ne $devEnvParams[$_]) { "$(if ($_ -notin $buildCommands) {"="} else { " "})$($devEnvParams[$_])" })" 
+        }) -join ' ')" 
+        [void](Remove-Item -Path "$($devEnvParams['Out'])" -Force -ErrorAction SilentlyContinue)
+
+        Start-Sleep -Seconds 2
+        try {
+            $command = ". '$($script:vs2022ExePath)' $(Resolve-Path -Relative $SolutionPath) $($devEnvParamsToString)"
+            Log-Action -Title "Building $($command)" -NoHeader -ScriptBlock {
+                Invoke-Expression $command
+            }
+            Start-Sleep -Seconds 2
+            Get-Process -name MSBuild*,devenv*|Wait-Process -TimeoutSec 180
+    
+            $succeeded = '(?<succeeded>\b(?:(\d+))\b)\s+succeeded'
+            $failed = '(?<failed>\b(?:(\d+))\b)\s+failed'
+            $skipped = '(?<skipped>\b(?:(\d+))\b)\s+skipped'
+            $result=ConvertFrom-Text -Path $devEnvParams['Out'].Replace('"','') -Pattern "=+.*build.*$($succeeded),\s+$($failed),\s+$($skipped)\s+=+" -NoProgress
+            if ($result -and $result.failed -gt 0) {
+                Write-Error -Message ("Building project $(if ($null -ne $devEnvParams['Project']) { "$($devEnvParams['Project']) in " })$($SolutionPath), or one of its dependencies failed  for details check log $($devEnvParams['Out'])")
+            } 
+            
+            return $result
+        }
+        finally {
+        }
+    }
+}
 
 #region Proxy Functions
 <#
@@ -804,7 +870,7 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
             $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
             $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
             $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
-            $result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($versionPattern)" | Select-Object -ExpandProperty version
+            $result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($versionPattern)" -NoProgress | Select-Object -ExpandProperty version
         }
         catch { '0.0.0' }
 
@@ -849,7 +915,7 @@ az --version;
     $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
     $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | Where-Object { $_ -match '(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)' }
 
-    $doCliUpgrade = (($updatesAvailable = ($result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($componentNamePattern)$($versionPattern)$($updateAvailablePattern)" | Where-Object { ![string]::IsNullOrWhiteSpace($_.updateAvailable) })).Count -gt 0)
+    $doCliUpgrade = (($updatesAvailable = ($result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($componentNamePattern)$($versionPattern)$($updateAvailablePattern)" -NoProgress | Where-Object { ![string]::IsNullOrWhiteSpace($_.updateAvailable) })).Count -gt 0)
     if ($doCliUpgrade) {
         Log-Action -Title 'The following Az Updates are afailable, and will be updated' -NoHeader -ScriptBlock { $updatesAvailable | ForEach-Object { "   $($_.name), v$($_.version)" } }
 
@@ -955,7 +1021,7 @@ Log-Action -Title 'Nuget Config' -ScriptBlock {
     $nugetList += (dotnet nuget list source --format Detailed) -match ("$($sequencePattern)({0})\s+$($statusPattern)" -f ($nugetSources.Keys -join '|'))
 
     [array]$nugetList = ($nugetlist | ForEach-Object {
-            $result = $_ | ConvertFrom-Text -Pattern "$($sequencePattern)$($namePattern)$($statusPattern)"
+            $result = $_ | ConvertFrom-Text -Pattern "$($sequencePattern)$($namePattern)$($statusPattern)" -NoProgress
             $result.enabled = ([regex]::Replace($result.enabled, '(?<status>Enabled)', $true.ToString())) # Back reference ${status} could be used for replacement
             $result.enabled = ([regex]::Replace($result.enabled, '(?<status>Disabled)', $false.ToString())) # Back reference ${status} could be used for replacement
 
@@ -1194,103 +1260,64 @@ Log-Action -Title 'Logging Distribution' -ScriptBlock {
     Manually copy the Build output to a suitable location (suggested C:\Program Files (x86)\First Response Finance Ltd\Evolve Logging Distributor )
     From a command prompt run FrFl.Service.LoggingDistributor.exe /i /user TEAM\Evolve /password ****** to install as a service
     "
-    $path='Evolve'|ForEach-Object { Get-ChildItem -Path "C:\data\tfs\git\$($_)" -file -Recurse -Filter *.sln|Select-Object -First 1 -ExpandProperty DirectoryName }
-    Invoke-CommandInPath -Path $path -ScriptBlock {
-        $loggingDistributerPath=(Get-ChildItem -Path . -file -Recurse -Filter FrFl.Service.LoggingDistributor.*proj|Select-Object -First 1)
-        $devEnvParams = [ordered]@{
-            "Rebuild"                                 = "`"Release`|AnyCPU`""
-            "Project"                                 = "`"$($loggingDistributerPath|Select-Object -ExpandProperty FullName|Resolve-Path -Relative)`""
-            # "p:SkipInvalidConfigurations"           = 'true'
-            # "p:GenerateProjectSpecificOutputFolder" = 'true'
-            # "p:DeployOnBuild"                       = 'true'
-            # "p:WebPublishMethod"                    = 'Package'
-            # #"p:OutDir"                             = "$(Build.BinariesDirectory)\"
-            # "nodeReuse:false"                       = $null
-            "Out"                                     = "`"$(Join-Path $env:TEMP -ChildPath "BuildLog.log")`""
-        }
-
-        git fetch --prune --all --quiet
-        git pull --all --quiet
-
-        $buildCommands=@(
-            'Build'
-            'Clean'
-            'Deploy'
-            'Out'
-            'Project'
-            'ProjectConfig'
-            'Rebuild'
-            'Upgrade'
-        )
-        $devEnvParamsToString = "$(($devEnvParams.Keys|ForEach-Object { 
-            "-$($_)$(if ($null -ne $devEnvParams[$_]) { "$(if ($_ -notin $buildCommands) {"="} else { " "})$($devEnvParams[$_])" })" 
-        }) -join ' ')" 
-        [void](Remove-Item -Path $devEnvParams['Out'] -Force -ErrorAction SilentlyContinue)
-        Start-Sleep -Seconds 2
-        try {
-            $command = ". '$($script:vs2022ExePath)' $(Resolve-Path -Relative .\FrFl.Evolve.sln) $($devEnvParamsToString)"
-            Log-Action -Title "Building $($command)" -NoHeader -ScriptBlock {
-                Invoke-Expression $command
-            }
-            Start-Sleep -Seconds 2
-            Get-Process -name MSBuild*,devenv*|Wait-Process -TimeoutSec 180
-    
-            $succeeded = '(?<succeeded>\b(?:(\d+))\b)\s+succeeded'
-            $failed = '(?<failed>\b(?:(\d+))\b)\s+failed'
-            $skipped = '(?<skipped>\b(?:(\d+))\b)\s+skipped'
-            $result=ConvertFrom-Text -Path $devEnvParams['Out'].Replace('"','') -Pattern "=+.*build.*$($succeeded),\s+$($failed),\s+$($skipped)\s+=+"
-            if ($result -and $result.failed -gt 0) {
-                Write-Host -Object ("Building project $($devEnvParams['Project']), or one of its dependencies failed  for details check log $($devEnvParams['Out'])")
-            } else {
-                Log-Action -Title "Create logging distribution folder" -NoHeader -ScriptBlock {
-                    $source="$(Resolve-Path -Relative -Path (Join-Path $loggingDistributerPath.DirectoryName -ChildPath "bin\Release"))\*"
-                    $destination="C:\Program Files (x86)\First Response Finance Ltd\Evolve Logging Distributor"
-                    [void](New-Item -ItemType Directory -Path $destination -Force -ErrorAction SilentlyContinue)
-                    [void]($result=Copy-Item -Path $source -Destination $destination -Recurse -Force -PassThru)
-                    Write-Host -Object ("   logging distributer has been set up in $($destination) copyied $($result.Count) files") -ForegroundColor Cyan
-                    Log-Action -Title 'TODO: Setting up Logging Distributer as a Service' -NoHeader -ForegroundColor Green -ScriptBlock {
-                        Invoke-CommandInPath -Path $destination -ScriptBlock {
-                            "         FrFl.Service.LoggingDistributor.exe /i /user TEAM\Evolve /password ******"
-                        }
-                    }
+    $solutionPath='Evolve'|ForEach-Object { Get-ChildItem -Path "C:\data\tfs\git\$($_)" -file -Recurse -Filter *.sln } | Select-Object -First 1
+    $projectName='FrFl.Service.LoggingDistributor'
+    $result = Build-SolutionOrProject -SolutionPath $solutionPath.FullName -ProjectName $projectName
+    if (!($result -and $result.failed -gt 0)) {
+        $loggingDistributorPath = Get-ChildItem -Path "$($solutionPath.DirectoryName)" -file -Recurse -Filter "$($projectName).*proj" | Select-Object -First 1
+        Log-Action -Title "Create logging distribution folder" -NoHeader -ScriptBlock {
+            $source="$(Resolve-Path -Relative -Path (Join-Path $loggingDistributorPath.DirectoryName -ChildPath "bin\Release"))\*"
+            $destination="C:\Program Files (x86)\First Response Finance Ltd\Evolve Logging Distributor"
+            [void](New-Item -ItemType Directory -Path $destination -Force -ErrorAction SilentlyContinue)
+            [void]($result=Copy-Item -Path $source -Destination $destination -Recurse -Force -PassThru)
+            Write-Host -Object ("   logging distributer has been set up in $($destination) copyied $($result.Count) files") -ForegroundColor Cyan
+            Log-Action -Title 'TODO: Setting up Logging Distributer as a Service' -NoHeader -ForegroundColor Green -ScriptBlock {
+                Invoke-CommandInPath -Path $destination -ScriptBlock {
+                    "         FrFl.Service.LoggingDistributor.exe /i /user TEAM\Evolve /password ******"
                 }
             }
-        }
-        finally {
-            <#Do this after the try block regardless of whether an exception occurred or not#>
         }
     }
 }
 
-Log-Action -Title 'Zeacom' -ForegroundColor Green -Skip -ScriptBlock {
+Log-Action -Title 'Register Zecom Server' -ScriptBlock {
     "
     Manual Instructions 
     Open an administrator command prompt
     Execute C:\Program Files (x86)\Telephony\CTI\Bin\ZCom.exe /regserver
     "
-    $path = Get-ChildItem -Path 'C:\Program Files (x86)\*','C:\Program Files\*' -Recurse -File -Include zcom.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
-    Invoke-CommandInPath -Path $path -Skip -ScriptBlock {
-        Log-Action -Title 'Register Zecom Server' -NoHeader -ScriptBlock {
-            ZCom.exe /regserver
+    $path = Get-ChildItem -Path "C:\Program Files*\Telephony\CTI\Bin\*" -Recurse -File -Include zcom.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
+    Invoke-CommandInPath -Path $path -ScriptBlock {
+        if (!(Test-Path -Path "$(Join-Path -Path $path -ChildPath 'ZCom.exe')")) {
+            Write-Warning -Message "ZCom.exe not found at '$($path)\ZCom.exe'"
+            return
         }
+
+        & ".\ZCom.exe" /regserver
     }
 }
 
 Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlock {
     "
     Connect to the VPN if you arn't already
-    In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts\Utility>BuildMicroservices.bat
+    In a admin PowerShell prompt execute set-executionpolicy Unrestricted
+    In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig>DevEnvMigration.bat
     In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts>CreateEventSources.bat
     In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts>CreateEvolveMSMQ.cmd
-    In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig>DevEnvMigration.bat
-    In a admin PowerShell prompt execute set-executionpolicy Unrestricted
+    In a admin command prompt execute C:\Data\TFS\Git\Evolve.Scripts\Utility>BuildMicroservices.bat
     Open and run the legacy Evolve.sln solution
     Access https://l-evolve/admin 
     You are good to go
     "
-    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\Utility" -ScriptBlock {
-        Log-Action -Title 'BuildMicroservices' -NoHeader -ScriptBlock {
-            & ".\BuildMicroservices.bat"
+    Invoke-CommandInPath -Path . -ScriptBlock {
+        Log-Action -Title 'Relax Powershell execution restrictions' -NoHeader -ScriptBlock {
+            Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+        }
+    }
+
+    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig" -ScriptBlock {
+        Log-Action -Title 'DevEnvMigration' -NoHeader -ScriptBlock {
+            & ".\DevEnvMigration.bat"
         }
     }
 
@@ -1303,20 +1330,22 @@ Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlo
         }
     }
         
-    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig" -ScriptBlock {
-        Log-Action -Title 'DevEnvMigration' -NoHeader -ScriptBlock {
-            & ".\DevEnvMigration.bat"
+    Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\Utility" -ScriptBlock {
+        Log-Action -Title 'BuildMicroservices' -NoHeader -ScriptBlock {
+            & ".\BuildMicroservices.bat"
         }
     }
 
     Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve" -ScriptBlock {
         Log-Action -Title 'Open and run the legacy Evolve.sln solution' -NoHeader -ScriptBlock {
-            Start-Process -FilePath ".\Evolve\Evolve.sln" -Wait
+            Start-Process -FilePath ".\FrFl.Evolve.sln"
+            Start-Sleep -Seconds 2
+            Get-Process -name devenv*|Wait-Process -TimeoutSec 180
         }
         Log-Action -Title 'Access https://l-evolve/admin' -NoHeader -ScriptBlock {
 
             $webLauncherUrl="https://l-evolve/admin"
-            Start-Process microsoft-edge:$webLauncherUrl -Wait
+            Start-Process -FilePath microsoft-edge:$webLauncherUrl
         }
     }
 }
@@ -1324,9 +1353,10 @@ Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlo
 Log-Action -Title 'TODO: Website setup' -ForegroundColor Green -ScriptBlock {
     "
     Setting up and running the website has a few additional steps. They are,
-
     Build the Evolve solution that hosts the public service api (Setting up portal api and vendor api)
     Build the Evolve.PublicWebsite.CMS solution
+
+    [Obsolete]
     Open a command prompt at the following directory: C:\Data\Tfs\Git\Evolve.PublicWebsite.CMS\Evolve.PublicWebsite.CMS
     Run `"npm i`" to restore the javascript packages for the project
     Run `"npm run build-prod`" to build the angular portion of the site (this may take a few mins to run)
@@ -1334,9 +1364,39 @@ Log-Action -Title 'TODO: Website setup' -ForegroundColor Green -ScriptBlock {
     Open a command prompt at the following directory: C:\Data\Tfs\Git\Evolve.PublicWebsite.SPA\Evolve.PublicWebsite.SPA
     Run `"npm i`" to restore the javascript packages for the project
     Run `"npm run build-prod`" to build the angular portion of the site (this may take a few mins to run)
+
+    Manual instructions
+    New Website Manial setup https://dev.azure.com/FrFl-Development/Evolve/_wiki/wikis/Evolve.wiki/368/Project-Setup
     In a admin command prompt execute C:\Data\TFS\Git\Evolve\Scripts\DevEnvConfig>DevEnvMigration.bat
     Go to l-web  and you're done
     "
+    $solutionPath='Evolve'|ForEach-Object { Get-ChildItem -Path "C:\data\tfs\git\$($_)" -file -Recurse -Filter *.sln } | Select-Object -First 1
+    $result = Build-SolutionOrProject -SolutionPath $solutionPath -ProjectName 'FrFl.PublicService.PortalApi.ServiceHost'
+    #$result
+    if (!($result -and $result.failed -gt 0)) {
+        $result = Build-SolutionOrProject -SolutionPath $solutionPath -ProjectName 'FrFl.PublicService.VendorApi.ServiceHost'
+        #$result
+        <#
+        if (!($result -and $result.failed -gt 0)) {
+            foreach ($projectName in @('Evolve.PublicWebsite.CMS', 'Evolve.PublicWebsite.SPA')) {
+                $path=$projectName|ForEach-Object { Get-ChildItem -Path "C:\data\tfs\git\$($_)" -file -Recurse -Filter *.sln|Select-Object -First 1 -ExpandProperty FullName }
+                Invoke-CommandInPath -Path $path -ScriptBlock {
+                    Log-Action -Title 'npm i' -NoHeader -ScriptBlock {
+                        & "npm i"
+                    }
+                    Log-Action -Title 'npm run build-prod' -NoHeader -ScriptBlock {
+                        & "npm run build-prod"
+                    }
+                }
+            }
+        }
+        #>
+
+        Log-Action -Title 'Access l-web' -NoHeader -ScriptBlock {
+            $webLauncherUrl="https://l-web"
+            Start-Process -FilePath microsoft-edge:$webLauncherUrl
+        }
+    }
 }
 
 Log-Action -Title "Update Outdated packages" -ScriptBlock {
