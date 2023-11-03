@@ -19,37 +19,38 @@ Write-Host "Uninstall some applications that come with Windows out of the box" -
 function removeApp {
 	Param ([string]$appName)
 	Write-Output "Trying to remove $appName"
-	Get-AppxPackage $appName -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
-	Get-AppXProvisionedPackage -Online | Where-Object DisplayName -like $appName | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+	[void](Get-AppxPackage $appName -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue)
+	[void](Get-AppXProvisionedPackage -Online | Where-Object DisplayName -like $appName | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue)
 }
 
+# Comment out or remove the apps from the list that you want to keep
 $applicationList = @(
 	"Microsoft.BingFinance"
 	"Microsoft.3DBuilder"
 	"Microsoft.BingNews"
 	"Microsoft.BingSports"
 	"Microsoft.BingWeather"
-	"Microsoft.CommsPhone"
-	"Microsoft.Getstarted"
-	"Microsoft.WindowsMaps"
+	#"Microsoft.CommsPhone"
+	#"Microsoft.Getstarted"
+	#"Microsoft.WindowsMaps"
 	"*MarchofEmpires*"
 	"Microsoft.GetHelp"
 	"Microsoft.Messaging"
-	"*Minecraft*"
-	"Microsoft.MicrosoftOfficeHub"
+	#"*Minecraft*"
+	#"Microsoft.MicrosoftOfficeHub"
 	"Microsoft.OneConnect"
-	"Microsoft.WindowsPhone"
+	#"Microsoft.WindowsPhone"
 	"Microsoft.WindowsSoundRecorder"
 	"*Solitaire*"
-	"Microsoft.MicrosoftStickyNotes"
-	"Microsoft.Office.Sway"
+	#"Microsoft.MicrosoftStickyNotes"
+	#"Microsoft.Office.Sway"
 	"Microsoft.XboxApp"
 	"Microsoft.XboxIdentityProvider"
 	"Microsoft.XboxGameOverlay"
 	"Microsoft.XboxGamingOverlay"
-	"Microsoft.ZuneMusic"
-	"Microsoft.ZuneVideo"
-	"Microsoft.NetworkSpeedTest"
+	#"Microsoft.ZuneMusic"
+	#"Microsoft.ZuneVideo"
+	#"Microsoft.NetworkSpeedTest"
 	"Microsoft.FreshPaint"
 	"Microsoft.Print3D"
 	"Microsoft.People*"
@@ -61,7 +62,7 @@ $applicationList = @(
     "king.com*"
     "G5*"
 	#"*Dell*"
-	"*Facebook*"
+	#"*Facebook*"
 	"*Keeper*"
 	"*Netflix*"
 	"*Twitter*"

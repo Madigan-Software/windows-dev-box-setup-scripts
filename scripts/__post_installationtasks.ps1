@@ -1350,6 +1350,7 @@ Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlo
         Log-Action -Title 'Open and run the legacy Evolve.sln solution' -NoHeader -ScriptBlock {
             Start-Process -FilePath ".\FrFl.Evolve.sln"
             Start-Sleep -Seconds 2
+            try { Get-Process -name devenv*|Wait-Process -TimeoutSec 180 } catch { }
             Get-Process -name devenv*|Wait-Process -TimeoutSec 180
         }
         Log-Action -Title 'Access https://l-evolve/admin' -NoHeader -ScriptBlock {
