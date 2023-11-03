@@ -384,6 +384,8 @@ function Build-SolutionOrProject {
     param (
         [Parameter()][string]$SolutionPath
        ,[Parameter()][string]$ProjectName
+       ,[Parameter()][switch]$Rebuild
+       ,[Parameter()][int]$Timeout = 180
     )
 
     $path = (Get-Item -Path $SolutionPath -ErrorAction SilentlyContinue | Select-Object -ExpandProperty DirectoryName)
@@ -392,7 +394,7 @@ function Build-SolutionOrProject {
     Invoke-CommandInPath -Path $path -ScriptBlock {
         $projectPath=(Get-ChildItem -Path . -file -Recurse -Filter "$($ProjectName).*proj"|Select-Object -First 1)
         $devEnvParams = [ordered]@{
-            "Rebuild"                                 = "`"Release`|AnyCPU`""
+            "Build"                                 = "`"Release`|AnyCPU`""
             # "p:SkipInvalidConfigurations"           = 'true'
             # "p:GenerateProjectSpecificOutputFolder" = 'true'
             # "p:DeployOnBuild"                       = 'true'
@@ -402,6 +404,7 @@ function Build-SolutionOrProject {
             "Out"                                     = "`"$(Join-Path $env:TEMP -ChildPath "$((New-Guid).Guid).BuildLog.log")`""
         }
         if ($null -ne $projectPath) { $devEnvParams['Project'] = "`"$($projectPath|Select-Object -ExpandProperty FullName|Resolve-Path -Relative)`"" }
+        if ($Rebuild.IsPresent -and $Rebuild.ToBool() -eq $true) { $devEnvParams['Rebuild'] = "`"Release`|AnyCPU`""; $devEnvParams.Remove('Build') }
 
         git fetch --prune --all --quiet
         git pull --all --quiet
@@ -428,7 +431,7 @@ function Build-SolutionOrProject {
                 Invoke-Expression $command
             }
             Start-Sleep -Seconds 2
-            Get-Process -name MSBuild*,devenv*|Wait-Process -TimeoutSec 180
+            Get-Process -name MSBuild*,devenv*|Wait-Process -TimeoutSec $Timeout
     
             $succeeded = '(?<succeeded>\b(?:(\d+))\b)\s+succeeded'
             $failed = '(?<failed>\b(?:(\d+))\b)\s+failed'
@@ -781,7 +784,7 @@ Log-Action -Title 'IIS hosting bundle' -ScriptBlock {
 choco install --yes wixtoolset --limit-output
 #choco install --yes wix35 --limit-output
 
-Log-Action -Title 'WIX Extension' -NoHeader -ScriptBlock {
+Log-Action -Title 'WIX Extension' -NoHeader -ForegroundColor Cyan -ScriptBlock {
     # WIX Extension(https://marketplace.visualstudio.com/items?itemName=WixToolset.WixToolsetVisualStudio2022Extension )
     #   Install-ChocolateyVsixPackage -packageName "wixtoolsetvisualstudio2019extension" -vsixUrl "https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2019extension/1.0.0.18/1640535816037/Votive2019.vsix" -vsVersion 17.1.0
     #  https://wixtoolset.gallerycdn.vsassets.io/extensions/wixtoolset/wixtoolsetvisualstudio2022extension/1.0.0.22/1668223914320/Votive2022.vsix
@@ -1262,18 +1265,25 @@ Log-Action -Title 'Logging Distribution' -ScriptBlock {
     "
     $solutionPath='Evolve'|ForEach-Object { Get-ChildItem -Path "C:\data\tfs\git\$($_)" -file -Recurse -Filter *.sln } | Select-Object -First 1
     $projectName='FrFl.Service.LoggingDistributor'
-    $result = Build-SolutionOrProject -SolutionPath $solutionPath.FullName -ProjectName $projectName
+    $result = Build-SolutionOrProject -SolutionPath $solutionPath.FullName -ProjectName $projectName -Timeout 180
     if (!($result -and $result.failed -gt 0)) {
         $loggingDistributorPath = Get-ChildItem -Path "$($solutionPath.DirectoryName)" -file -Recurse -Filter "$($projectName).*proj" | Select-Object -First 1
         Log-Action -Title "Create logging distribution folder" -NoHeader -ScriptBlock {
             $source="$(Resolve-Path -Relative -Path (Join-Path $loggingDistributorPath.DirectoryName -ChildPath "bin\Release"))\*"
             $destination="C:\Program Files (x86)\First Response Finance Ltd\Evolve Logging Distributor"
             [void](New-Item -ItemType Directory -Path $destination -Force -ErrorAction SilentlyContinue)
+            
+            #TODO: Stop service
+            Get-Service -Name FrFl.Service.LoggingDistributor -ErrorAction SilentlyContinue | Stop-Service -Passthru -Force -ErrorAction SilentlyContinue
             [void]($result=Copy-Item -Path $source -Destination $destination -Recurse -Force -PassThru)
             Write-Host -Object ("   logging distributer has been set up in $($destination) copyied $($result.Count) files") -ForegroundColor Cyan
             Log-Action -Title 'TODO: Setting up Logging Distributer as a Service' -NoHeader -ForegroundColor Green -ScriptBlock {
                 Invoke-CommandInPath -Path $destination -ScriptBlock {
                     "         FrFl.Service.LoggingDistributor.exe /i /user TEAM\Evolve /password ******"
+                    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($(Read-host -Prompt "Enter password for Evolve user" -AsSecureString))
+                    $PlainText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+                    .\FrFl.Service.LoggingDistributor.exe /i /user TEAM\Evolve /password [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+                    Get-Service -Name FrFl.Service.LoggingDistributor -ErrorAction SilentlyContinue | Start-Service -Passthru -Force
                 }
             }
         }
@@ -1317,7 +1327,7 @@ Log-Action -Title 'TODO: Solution Build & Run' -ForegroundColor Green -ScriptBlo
 
     Invoke-CommandInPath -Path "C:\Data\TFS\Git\Evolve.Scripts\DevEnvConfig" -ScriptBlock {
         Log-Action -Title 'DevEnvMigration' -NoHeader -ScriptBlock {
-            & ".\DevEnvMigration.bat" -InstallVSTemplate
+            & ".\DevEnvMigration.bat" -InstallVSTemplate -DoMicroserviceDatabaseUpdate
         }
     }
 
@@ -1371,10 +1381,10 @@ Log-Action -Title 'TODO: Website setup' -ForegroundColor Green -ScriptBlock {
     Go to l-web  and you're done
     "
     $solutionPath='Evolve'|ForEach-Object { Get-ChildItem -Path "C:\data\tfs\git\$($_)" -file -Recurse -Filter *.sln } | Select-Object -First 1
-    $result = Build-SolutionOrProject -SolutionPath $solutionPath -ProjectName 'FrFl.PublicService.PortalApi.ServiceHost'
+    $result = Build-SolutionOrProject -SolutionPath $solutionPath -ProjectName 'FrFl.PublicService.PortalApi.ServiceHost' -Timeout 180
     #$result
     if (!($result -and $result.failed -gt 0)) {
-        $result = Build-SolutionOrProject -SolutionPath $solutionPath -ProjectName 'FrFl.PublicService.VendorApi.ServiceHost'
+        $result = Build-SolutionOrProject -SolutionPath $solutionPath -ProjectName 'FrFl.PublicService.VendorApi.ServiceHost' -Timeout 180
         #$result
         <#
         if (!($result -and $result.failed -gt 0)) {
