@@ -182,15 +182,16 @@ function Create-SymbolicLink {
     begin { }
     process {
         foreach ($symbolicLink in $SymbolicLinks) {
-            [void](Remove-Item $symbolicLink.SymbolicLink -Force -ErrorAction SilentlyContinue)
-            [void](New-Item -Force -ItemType SymbolicLink -Path $symbolicLink.SymbolicLink -Target $SymbolicLinks.SymbolicLinkTarget)
-                
             if ($symbolicLink.Backup.IsPresent -and $symbolicLink.Backup.ToBool() -eq $true) {
                 $backupTarget = "$($Target)-Backup-$($(New-Guid).Guid)"
                 [void]($result = Copy-Item -Path $symbolicLink.SymbolicLinkTarget -Destination $backupTarget -Recurse -Confirm:$false -Force -PassThru)
                 
                 Write-Verbose -Message ($result | Out-String -Width 4095) -Verbose
             }
+
+            [void](Remove-Item $symbolicLink.SymbolicLink -Force -Confirm:$false -Recurse -ErrorAction SilentlyContinue)
+            [void](New-Item -Force -ItemType SymbolicLink -Path $symbolicLink.SymbolicLink -Target $SymbolicLinks.SymbolicLinkTarget)
+                
         }
     }
     end { }
@@ -1251,6 +1252,139 @@ Log-Action -Title 'TODO: More SQL Server' -ForegroundColor Green -ScriptBlock {
         Get snippets from https://frfl.sharepoint.com/sites/ITTeam/Developement/Forms/AllItems.aspx?viewid=e84320c5-033b-4a12-a5eb-971adf5b1171&id=%2Fsites%2FITTeam%2FDevelopement%2FTools%2FSQL Prompt%2FSnippets 
         Get Styles from https://frfl.sharepoint.com/sites/ITTeam/Developement/Forms/AllItems.aspx?viewid=e84320c5-033b-4a12-a5eb-971adf5b1171&id=%2Fsites%2FITTeam%2FDevelopement%2FTools%2FSQL Prompt%2FStyles 
         "
+        #Start-Process "odopen://sync/?siteId=SiteID_HERE&amp;webId=WebID_HERE&amp;listId=ListID_HERE&amp;userEmail=UserEmail_HERE&amp;webUrl=WebURL_HERE"
+        <#
+        Start-Process "odopen://sync?siteId=%7Bf66eaa35%2Dbd5c%2D4954%2D9739%2D2d96aa4f9155%7D&webId=%7B14e4b14b%2De21b%2D410b%2D895e%2D2ee04ae2841d%7D&listId=1a39d371%2D212e%2D4f8a%2Da861%2Db24bdae04e78&webUrl=https%3A%2F%2Ffrfl%2Esharepoint%2Ecom%2Fsites%2FITTeam&webTitle=IT%20Team&listTitle=Development&scope=OPENLIST&isSiteAdmin=0
+        
+        &userEmail=cyril%2Emadigan%40frfl%2Eco%2Euk
+        &userId=e501559d%2Daa6f%2D4860%2Da65d%2D008cf90c5bb2
+        &webTemplate=64
+        &webLogoUrl=%2Fsites%2FITTeam%2F%5Fapi%2FGroupService%2FGetGroupImage%3Fid%3D%27f1f4d0ec%2Dc839%2D4243%2Db3b8%2D371250982cfd%27%26hash%3D637674028206291066
+        &onPrem=0
+        &libraryType=3
+        "#>
+        # Give Windows some time to load before getting the email address
+        function Test-ADAuthentication {
+            [CmdletBinding(DefaultParametersetName="default", SupportsShouldProcess = $true)]
+            Param(
+               [Parameter(ParameterSetName="default",Mandatory)]
+               [ValidateNotNull()]
+               [System.Management.Automation.PSCredential]  #Type
+               [System.Management.Automation.Credential()]  #TypeConverter
+               $Credential = [System.Management.Automation.PSCredential]::Empty
+            )
+
+            [bool]$result = $false
+          
+            Add-Type -AssemblyName System.DirectoryServices.AccountManagement
+            
+            $contextType = [System.DirectoryServices.AccountManagement.ContextType]::Domain
+
+            $domain = if ($credential -ne [System.Management.Automation.PSCredential]::Empty) {
+                if ($Credential.GetNetworkCredential().Domain) { 
+                    $Credential.GetNetworkCredential().Domain 
+                } elseif ($credential.UserName.Split('@')[1]) {
+                    $env:USERDOMAIN
+                } else {
+                    $credential.UserName.Split('\')[0]
+                }
+            } else {
+                $env:USERDOMAIN
+            }
+            
+            $argumentList = New-Object -TypeName "System.Collections.ArrayList"
+            $null = $argumentList.Add($contextType)
+            $null = $argumentList.Add($domain)
+        
+            #if($null -ne $Server){ $argumentList.Add($Server) }            
+            $principalContext = New-Object System.DirectoryServices.AccountManagement.PrincipalContext -ArgumentList $argumentList -ErrorAction SilentlyContinue
+        
+            if ($null -eq $principalContext) { Write-Warning "$Domain\$User - AD Authentication failed" }
+            if ($principalContext.ValidateCredentials($Credential.GetNetworkCredential().UserName, $Credential.GetNetworkCredential().Password)) {
+                Write-Host -ForegroundColor green "$Domain\$User - AD Authentication OK"
+                $result = $true
+            }
+            else {
+                Write-Warning "$Domain\$userName - AD Authentication failed"
+            }
+        
+            return $result
+        }
+        
+        $UserName = $env:USERNAME
+        $Domain = "@frfl.co.uk"
+        [void]($userEmail = (az account show|ConvertFrom-Json|Select-Object @{ E={ $_.user.name }; N='Email'}|Select-Object -ExpandProperty Email))
+        if (!$userEmail) { $userEmail=$UserName + $Domain }
+        Do {
+            $credentials = $(Get-Credential -Message "Please supply your credentials" -UserName $userEmail)
+        
+        } Until ((Test-ADAuthentication -Credential $credentials))
+        
+        $synchroniseSharepointLibraries = @{
+            Web = @{
+                Id    = "14e4b14b%2De21b%2D410b%2D895e%2D2ee04ae2841d"
+                Name  = "ITTeam"
+                Title = "IT Team"
+                Url   = "https://frfl.sharepoint.com/sites/ITTeam"
+                Site  = @{ Name = "ITTeam"; Id = "f66eaa35%2Dbd5c%2D4954%2D9739%2D2d96aa4f9155"; }
+                List  = @{ 
+                    #Documents            = @{ Id = "d01eb810%2D86d9%2D439b%2D86c7%2Dc6e9ceb317ec"; Title = "Documents"; }
+                    #BusinessIntelligence = @{ Id = "becc8b61%2D17ee%2D4c80%2Db666%2Da5dde99a24c9"; Title = "Business Intelligence"; }
+                    #ChangeManagement     = @{ Id = "fefee048%2D0645%2D42c3%2D9f34%2D2d85fe71f397"; Title = "Change Management"; }
+                    Development          = @{ Id = "1a39d371%2D212e%2D4f8a%2Da861%2Db24bdae04e78"; Title = "Development"; }
+                    #Infrastructure       = @{ Id = "2cd12d31%2D6555%2D43f4%2Da16f%2Dcf59c7d4a51e"; Title = "Infrastructure"; }
+                    #ServiceDesk          = @{ Id = "483078e1%2D60c5%2D4c86%2D92eb%2Deca9b2c9cc63"; Title = "ServiceDesk"; }
+                    TeamManagement       = @{ Id = "93e4bb97%2D8f6c%2D4907%2D9d37%2Df847b00f6840"; Title = "Team Management"; }
+                    #TestTeam             = @{ Id = "0f666079%2D5539%2D4bbf%2Daaf9%2D9a96b1acdd03"; Title = "Test Team"; }
+                    #Contracts            = @{ Id = "4cb602d5%2Df481%2D484b%2D882b%2D0d610c26ef91"; Title = "Contracts"; }
+                    #Analytics            = @{ Id = "4b96fbb8%2D1bb6%2D4696%2D9c61%2D12ae555502e6"; Title = "Analytics"; }
+                }
+                Scope = "OPENLIST"
+            }
+        }
+        $synchroniseSharepointLibraries.Keys | ForEach-Object {
+            $web = $synchroniseSharepointLibraries[$_]
+            $web.List.Keys | ForEach-Object {
+                $list = $web.List[$_]
+        
+                $webUrl = $web.Url
+                $webId = $web.Id
+                $siteId = $web.Site.Id
+                $listId = $list.Id
+                $listTitle = $list.Title
+                $webTitle = $web.Title
+        
+                if (!(Test-Path -Path "$($env:USERPROFILE)\First Response Finance Ltd\$($webTitle) - $($list.Title)\" -PathType Container -ErrorAction SilentlyContinue)) {
+                    # Use a "Do" loop to check to see if OneDrive process has started and continue to check until it does
+                    Do{
+                        # Check to see if OneDrive is running
+                        $ODStatus = Get-Process onedrive -ErrorAction SilentlyContinue
+                        
+                        # If it is start the sync. If not, loopback and check again
+                        If ($ODStatus) 
+                        {
+                            # Give OneDrive some time to start and authenticate before syncing library
+                            Start-Sleep -s 30
+            
+                            # set the path for odopen
+                            $odopen = "odopen://sync/?siteId=" + $siteId + "&webId=" + $webId + "&webUrl=" + $webUrl +             "&webTitle=" + $webTitle + "&listId=" + $listId + "&listTitle=" + $listTitle + "&userEmail=" + $userEmail + "&scope=OPENLIST"
+        
+                            #Start the sync
+                            Start-Process $odopen -Credential $credentials
+                            #Start-Process $odopen
+                        }
+                    }
+                    Until ($ODStatus)
+                } else {
+                    Write-Host -Object ("   $($webTitle) - $($list.Title) already synchronised") -ForegroundColor Cyan
+                }
+            }
+        }
+        
+        $copySQLPromptSnippetsPath= "$($env:USERPROFILE)\First Response Finance Ltd\IT Team - Development\Tools\SQL Prompt\Snippets\CopySqlPromptSnippets.bat"
+        if ((Test-Path -Path $copySQLPromptSnippetsPath -PathType Leaf)) {
+            Invoke-Expression -Command "& `"$($copySQLPromptSnippetsPath)`" -AddScheduledTask"
+        }
     }
 }
 
@@ -1419,6 +1553,9 @@ Log-Action -Title "Set Up SymbolicLinks to folders" -NoHeader -ScriptBlock {
     $symbolicLinks = @{ 
         'Editor Config' = @{ SymbolicLink = [string]"C:\Data\TFS\Git\.editorconfig"; SymbolicLinkTarget = [string]"C:\data\tfs\git\EditorConfig\.editorconfig"; Backup = [switch]$false; } 
         'Projects'      = @{ SymbolicLink = [string]"C:\Projects"; SymbolicLinkTarget = [string]"C:\data\tfs\git"; Backup = [switch]$false; } 
+    }
+    Get-ChildItem -Path "$($env:USERPROFILE)\First Response Finance Ltd\IT Team - Development\Tools\SQL Prompt\Styles\" -Filter *.sqlpromptstyle* | ForEach-Object {
+        $symbolicLinks.Add("SqlPrompt$($_.Name)", @{ SymbolicLink = [string]"$($env:LOCALAPPDATA)\Red Gate\SQL Prompt 10\Styles\$($_.Name)"; SymbolicLinkTarget = [string]"$($_.FullName)"; Backup = [switch]$false; })
     }
 
     $symbolicLinks.Keys | ForEach-Object { 
