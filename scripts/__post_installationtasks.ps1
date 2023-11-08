@@ -1544,6 +1544,65 @@ Log-Action -Title 'TODO: Website setup' -ForegroundColor Green -ScriptBlock {
     }
 }
 
+Log-Action -Title 'Optional VS2022 Extensions' -NoHeader -ForegroundColor Cyan -ScriptBlock {
+    $extensions = @{
+        VSColorOutput   = @{
+            PackageName = "vscoloroutputvisualstudio2022extension"
+            FileName    = "VSColorOutput.vsix"
+            ChecksumMD5 = '1AC0C61B7FB1D88C2193CFB8E8E38519' # $checkSumSha256="C8B3E77EF18B8F5190B4B9BB6BA6996CB528B8F2D6BC34B373BB2242D71F3F43"
+            Url         = "https://mikeward-annarbor.gallerycdn.vsassets.io/extensions/mikeward-annarbor/vscoloroutput/2.74/1692882607561/$($this.FileName)"; <# https://marketplace.visualstudio.com/items?itemName=MikeWard-AnnArbor.VSColorOutput64 #>
+            Checksum    = $this.ChecksumMD5;
+        }
+        GitHubCodePilot = @{
+            <#
+            https://learn.microsoft.com/en-us/visualstudio/ide/work-with-github-accounts
+            #>
+            PackageName = "githubcodepilotvisualstudio2022extension"
+            FileName    = "GitHub.Copilot.Vsix.1.133.0.0.vsix"
+            ChecksumMD5 = '1AC0C61B7FB1D88C2193CFB8E8E38519' # $checkSumSha256="C8B3E77EF18B8F5190B4B9BB6BA6996CB528B8F2D6BC34B373BB2242D71F3F43"
+            Url         = "https://github.gallerycdn.vsassets.io/extensions/github/copilotvs/1.133.0.0/1699306328409/$($this.FileName)"; <# https://marketplace.visualstudio.com/items?itemName=MikeWard-AnnArbor.VSColorOutput64 #>
+            Checksum    = $this.ChecksumMD5;
+        }
+    }
+    
+    $extensions.Keys | ForEach-Object {
+        
+        $extension = $extensions[$_]
+        if ($extension.Url -notmatch "$($extension.FileName)$") { $extension.Url = "$($extension.Url)$($extension.FileName)" }
+        if ($extension.Checksum -notmatch "$($extension.ChecksumMD5)$") { $extension.Checksum = "$($extension.ChecksumMD5)" }
+
+        do {
+            $promptResult = Read-Host -Prompt "Install $($extension.PackageName) (Y/N)"
+        } until (
+            <# Condition that stops the loop if it returns true #>
+            $promptResult -match '^[yn]$'
+        )
+
+        if ($promptResult -match '^[n]$') {
+            Write-Host -Object "Skipping $($extension.PackageName)" -ForegroundColor Cyan
+        } else {
+            # $vsixFileName = $extension.FileName
+            # $checksumMD5 = $extension.ChecksumMD5
+            # $vsixUrl = $extension.Url
+            # $checksum = $extension.Checksum
+            # $packageName = $extension.PackageName
+            # if (!(Get-InstalledVsixPackage -Name $packageName)) {
+            #     Install-ChocolateyVsixPackage -packageName extension.PackageName -vsixUrl $extension.Url -vsVersion 17.1.0
+            #     Install-VsixPackage -VsixFileName $vsixFileName -ChecksumMD5 $checksumMD5 -VsixUrl $vsixUrl -Checksum $checksum -PackageName $packageName
+            # }
+            
+            $params = @{
+                PackageName  = $extension.PackageName
+                VsixFileName = $extension.FileName;
+                VsixUrl      = $extension.Url;
+                Checksum     = $extension.Checksum;
+            }
+        
+            Invoke-VSIXInstaller @params
+        }
+    }
+}
+
 Log-Action -Title "Update Outdated packages" -ScriptBlock {
     $outdated = choco outdated --limit-output | Select-Object @{E = { $_.Split('|') | Select-Object -First 1 }; N = "Id" }, @{E = { $_.Split('|') | Select-Object -Skip 1 -First 1 }; N = "CurrentVersion" }, @{E = { $_.Split('|') | Select-Object -Skip 2 -First 1 }; N = "NewVersion" }, @{E = { $_.Split('|') | Select-Object -Skip 3 -First 1 }; N = "Pinned" }
     $outdated | Where-Object { !("$($_.Pinned)" -as [bool]) } | ForEach-Object { choco upgrade --yes $_.Id --limit-output }
