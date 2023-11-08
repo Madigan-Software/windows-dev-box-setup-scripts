@@ -1608,6 +1608,22 @@ Log-Action -Title "Update Outdated packages" -ScriptBlock {
     $outdated | Where-Object { !("$($_.Pinned)" -as [bool]) } | ForEach-Object { choco upgrade --yes $_.Id --limit-output }
 }
 
+Log-Action -Title "Update GitCredential - Namespace" -ScriptBlock {
+    if ($PSScriptRoot -match 'Sandbox\windows-dev-box-setup-scripts') {
+        # $gitCredentialPath = "$($env:USERPROFILE)\.git-credentials"
+        # if ((Test-Path -Path $gitCredentialPath -PathType Leaf)) {
+        #     $gitCredential = Get-Content -Path $gitCredentialPath
+        #     if ($gitCredential -match 'namespace=GitHub - Windows Dev Box') {
+        #         Write-Host -Object "GitCredential already has namespace=GitHub - Windows Dev Box" -ForegroundColor Cyan
+        #     } else {
+        #         $gitCredential += "`r`nnamespace=GitHub - Windows Dev Box"
+        #         Set-Content -Path $gitCredentialPath -Value $gitCredential
+        #     }
+        # }
+        git config credential.namespace "GitHub - Windows Dev Box"
+    }
+}
+
 Log-Action -Title "Set Up SymbolicLinks to folders" -NoHeader -ScriptBlock {
     $symbolicLinks = @{ 
         'Editor Config' = @{ SymbolicLink = [string]"C:\Data\TFS\Git\.editorconfig"; SymbolicLinkTarget = [string]"C:\data\tfs\git\EditorConfig\.editorconfig"; Backup = [switch]$false; } 
