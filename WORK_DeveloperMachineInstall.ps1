@@ -201,7 +201,7 @@ function _chocolatey-InstallOrUpdate {
 
 $RefreshEnvironment={
     $message = "*** Refresh Environment ***"
-    if ((Get-Command -Name 'Update-SessionEnvironment')) {
+    if ((Get-Command -Name 'Update-SessionEnvironment' -ErrorAction SilentlyContinue)) {
         $message = $message -replace '\*\*\*$', '- Update-SessionEnvironment ***'
         _logMessage -Message $message -ForegroundColor Yellow
         Update-SessionEnvironment 
