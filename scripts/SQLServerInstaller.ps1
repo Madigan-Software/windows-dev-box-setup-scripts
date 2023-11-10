@@ -15,6 +15,15 @@ if (!$PSScriptRoot) {Set-Variable -Name PSScriptRoot -Value $MyInvocation.PSScri
 [ValidateSet("sql-server")][string]$ProductName="sql-server"
 [ValidateSet("sql-server-2019","sql-server-2022")][string]$PackageId="$($ProductName)-$($Version)"
 
+$IsVirtual = ((Get-WmiObject Win32_ComputerSystem).model).Contains("Virtual")
+$IsWindowsSandbox = {
+    return (
+        $env:UserName -eq 'WDAGUtilityAccount' -and
+        (Get-Service -Name cexecsvc).Status -eq 'Running' -and 
+        $(&$IsVirtual)
+    )
+}
+
 function _IsMsSQLServerInstalled($serverInstance) {
     If(Test-Path 'HKLM:\Software\Microsoft\Microsoft SQL Server\Instance Names\SQL') { return $true }
     try {
