@@ -285,7 +285,18 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
         #$invocationPath = $scriptInvovcation.InvocationName # invocation relative to `$PWD
 
         _logMessage -Message "executing $helperUri/$script ..."
-        $expression=((new-object net.webclient).DownloadString("$helperUri/$script"))
+        $expression=try {
+            ((new-object net.webclient).DownloadString("$helperUri/$script"))
+        } catch { 
+            $fallbackUri = if (Test-Path -Path "C:\data\tfs\git\Sandbox\windows-dev-box-setup-scripts\" -PathType Container) { 
+                "C:\data\tfs\git\Sandbox\windows-dev-box-setup-scripts" 
+            } else { 
+                'https://raw.githubusercontent.com/Madigan-Software/windows-dev-box-setup-scripts/FRFL' 
+            }
+            $helperUri=$fallbackUri
+            $helperUri = $helperUri -replace '(\\|/)$',''
+            ((new-object net.webclient).DownloadString("$helperUri/$script"))
+        }
         Invoke-Expression $expression
         if (Test-PendingReboot) { Invoke-Reboot }
     }
