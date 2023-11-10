@@ -893,7 +893,7 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
     $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
 
     [array]$azureExtensions = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | ConvertFrom-Json | Select-Object -unique name, summary, version, installed, experimental, preview
-    [bool]$isBicepInstalled
+    [bool]$isLatestBicepInstalled= $false
     if (($extensions -contains 'bicep')) {
         $bicepVersion = try {
             $functions = ''
@@ -904,11 +904,12 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
             $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
             $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
             $result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($versionPattern)" -NoProgress | Select-Object -ExpandProperty version
-            $isBicepInstalled = $true
         }
         catch { '0.0.0' }
         
-        if (!($azureExtensions | Where-Object name -match 'bicep')) { $azureExtensions += @{ name = "bicep"; summary = $null; version = $((ListBicepVersions -Latest) -as [System.Version]); installed = $isBicepInstalled -and $bicepVersion -ne '0.0.0'; experimental = $false; preview = $false; } | Select-Object name, summary, version, installed, experimental, preview }
+        $latestBicepVersion = (ListBicepVersions -Latest) -as [System.Version]
+        $isLatestBicepInstalled = $latestBicepVersion -eq $bicepVersion
+        if (!($azureExtensions | Where-Object name -match 'bicep')) { $azureExtensions += @{ name = "bicep"; summary = $null; version = $latestBicepVersion; installed = $isLatestBicepInstalled; experimental = $false; preview = $false; } | Select-Object name, summary, version, installed, experimental, preview }
     }
     #endregion get available extensions matching extension list 
     $azureExtensions = $azureExtensions | Where-Object { $_.name -match ('({0})' -f $($extensions -join '|')) -and !$_.installed }
@@ -919,7 +920,7 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
     }) | ForEach-Object {
         $azComponent = $_
         switch ($azComponent.name) {
-            'bicep' { "az $($azComponent.name) $(if (!$isBicepInstalled) {'install'} else {'upgrade'})" }
+            'bicep' { "az $($azComponent.name) $(if (($bicepVersion-as [System.Version]) -eq (0.0.0 -as [System.Version]) ) {'install'} else {'upgrade'})" }
             Default { "az extension add --name $($azComponent.name)" }
         }
     }
