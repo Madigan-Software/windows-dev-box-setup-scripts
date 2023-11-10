@@ -862,7 +862,7 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
         "az extension list-available --output jsonc;"
     )
     $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
-    $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+    $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
 
     [array]$azureExtensions = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | ConvertFrom-Json | Select-Object -unique name, summary, version, installed, experimental, preview
     if (($extensions -contains 'bicep')) {
@@ -872,7 +872,7 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
                 "az bicep version;"
             )
             $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
-            $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+            $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
             $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
             $result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($versionPattern)" -NoProgress | Select-Object -ExpandProperty version
         }
@@ -903,7 +903,7 @@ Log-Action -Title $("Install Azure Addons/Extensions ('$("$($extensions -join '"
         # '@.Replace('<<DEFINITION>>', $((Get-Command -Name 'ConvertFrom-Text')).Definition)
         $functions = ''
         $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $azCliInstall).Trim()
-        $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+        $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
         $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
     }
     #endregion install missing extensions
@@ -916,7 +916,7 @@ az --version;
 '@
     )
     $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
-    $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+    $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
     $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock | Where-Object { $_ -match '(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)' }
 
     $doCliUpgrade = (($updatesAvailable = ($result | Where-Object { $_ } | ConvertFrom-Text -Pattern "$($componentNamePattern)$($versionPattern)$($updateAvailablePattern)" -NoProgress | Where-Object { ![string]::IsNullOrWhiteSpace($_.updateAvailable) })).Count -gt 0)
@@ -928,7 +928,7 @@ az --version;
             'az upgrade --yes;'
         )
         $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
-        $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+        $scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
         $result = Invoke-CommandInPath -Path (Get-Location) -ScriptBlock $scriptBlock
     }
     #endregion upgrade az
@@ -985,7 +985,7 @@ Log-Action -Title 'Clone Repos' -ScriptBlock {
                 "$($utilityPath)\CloneAllRepos.ps1 -RepositoryNameStartsWith '$($repositoryName)';"
             )
             $powershellCommand = $powershellCommandTemplate.Replace('<<FUNCTIONS>>', $functions).Replace('<<COMMANDS>>', $commands).Trim()
-            #$scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
+            #$scriptBlock = ([scriptblock]::Create(("powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command `"{0}`"" -f $powershellCommand)))
             $scriptBlock = ([scriptblock]::Create(("{0}" -f $powershellCommand)))
             Invoke-CommandInPath -Path $utilityPath -ScriptBlock $scriptBlock
         }
@@ -1417,7 +1417,7 @@ Log-Action -Title 'Logging Distribution' -ScriptBlock {
                     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($(Read-host -Prompt "Enter password for Evolve user" -AsSecureString))
                     $PlainText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
                     .\FrFl.Service.LoggingDistributor.exe /i /user TEAM\Evolve /password [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-                    Get-Service -Name FrFl.Service.LoggingDistributor -ErrorAction SilentlyContinue | Start-Service -Passthru -Force
+                    Get-Service -Name FrFl.Service.LoggingDistributor -ErrorAction SilentlyContinue | Start-Service -Passthru
                 }
             }
         }
