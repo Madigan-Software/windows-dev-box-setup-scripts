@@ -303,7 +303,7 @@ Import-Module (Join-Path -Path "C:\ProgramData\Boxstarter" -ChildPath BoxStarter
     
     #--- Setting up Windows OS ---
     executeScript "scripts/WinGetInstaller.ps1"
-    if (!$IsWindowsSandbox) {
+    if (!(&$IsWindowsSandbox)) {
         executeScript "scripts/WindowsOptionalFeatures.ps1"
     }
 
