@@ -112,7 +112,7 @@ function _chocolatey-InstallOrUpdate {
             if (!($? -or $LASTEXITCODE -eq 0)) { throw "Error occurred upgrading $($packageId) - $($LASTEXITCODE)" }
         }
     }; 
-    Write-Host -Object ("$($packageId) v$($packageList|Select-Object -ExpandProperty Version)") -ForegroundColor Cyan;
+    Write-Host -Object ("$($packageId) v$($remotePackageListVersion|Select-Object -ExpandProperty Version)") -ForegroundColor Cyan;
 }
 
 $RefreshEnvironment={

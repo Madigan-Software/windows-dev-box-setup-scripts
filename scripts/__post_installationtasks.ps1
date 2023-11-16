@@ -1448,7 +1448,7 @@ Log-Action -Title 'Logging Distribution' -ScriptBlock {
                     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($(Read-host -Prompt "Enter password for Evolve user" -AsSecureString))
                     $PlainText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
                     .\FrFl.Service.LoggingDistributor.exe /i /user TEAM\Evolve /password [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-                    Get-Service -Name FrFl.Service.LoggingDistributor -ErrorAction SilentlyContinue | Start-Service -Passthru
+                    Get-Service -Name FrFl.Service.LoggingDistributor -ErrorAction SilentlyContinue | Start-Service -Passthru -ErrorAction SilentlyContinue
                 }
             }
         }
@@ -1461,7 +1461,7 @@ Log-Action -Title 'Register Zecom Server' -ScriptBlock {
     Open an administrator command prompt
     Execute C:\Program Files (x86)\Telephony\CTI\Bin\ZCom.exe /regserver
     "
-    $path = Get-ChildItem -Path "C:\Program Files*\Telephony\CTI\Bin\*" -Recurse -File -Include zcom.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
+    $path = Get-ChildItem -Path "C:\Program Files*\Telephony\CTI\Bin\*" -File -Filter ZCom.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
     Invoke-CommandInPath -Path $path -ScriptBlock {
         if (!(Test-Path -Path "$(Join-Path -Path $path -ChildPath 'ZCom.exe')")) {
             Write-Warning -Message "ZCom.exe not found at '$($path)\ZCom.exe'"
@@ -1547,10 +1547,10 @@ Log-Action -Title 'TODO: Website setup' -ForegroundColor Green -ScriptBlock {
     Go to l-web  and you're done
     "
     $solutionPath='Evolve'|ForEach-Object { Get-ChildItem -Path "C:\data\tfs\git\$($_)" -file -Recurse -Filter *.sln } | Select-Object -First 1
-    $result = Build-SolutionOrProject -SolutionPath $solutionPath -ProjectName 'FrFl.PublicService.PortalApi.ServiceHost' -Timeout 180
+    $result = Build-SolutionOrProject -SolutionPath $solutionPath.FullName -ProjectName 'FrFl.PublicService.PortalApi.ServiceHost' -Timeout 180
     #$result
     if (!($result -and $result.failed -gt 0)) {
-        $result = Build-SolutionOrProject -SolutionPath $solutionPath -ProjectName 'FrFl.PublicService.VendorApi.ServiceHost' -Timeout 180
+        $result = Build-SolutionOrProject -SolutionPath $solutionPath.FullName -ProjectName 'FrFl.PublicService.VendorApi.ServiceHost' -Timeout 180
         #$result
         <#
         if (!($result -and $result.failed -gt 0)) {
@@ -1580,7 +1580,7 @@ Log-Action -Title 'Optional VS2022 Extensions' -NoHeader -ForegroundColor Cyan -
         VSColorOutput   = @{
             PackageName = "vscoloroutputvisualstudio2022extension"
             FileName    = "VSColorOutput.vsix"
-            ChecksumMD5 = '1AC0C61B7FB1D88C2193CFB8E8E38519' # $checkSumSha256="C8B3E77EF18B8F5190B4B9BB6BA6996CB528B8F2D6BC34B373BB2242D71F3F43"
+            ChecksumMD5 = 'CF480CBB9F49F6446A8496E5897E94C6' # $checkSumSha256=""
             Url         = "https://mikeward-annarbor.gallerycdn.vsassets.io/extensions/mikeward-annarbor/vscoloroutput/2.74/1692882607561/$($this.FileName)"; <# https://marketplace.visualstudio.com/items?itemName=MikeWard-AnnArbor.VSColorOutput64 #>
             Checksum    = $this.ChecksumMD5;
         }
@@ -1590,7 +1590,7 @@ Log-Action -Title 'Optional VS2022 Extensions' -NoHeader -ForegroundColor Cyan -
             #>
             PackageName = "githubcodepilotvisualstudio2022extension"
             FileName    = "GitHub.Copilot.Vsix.1.133.0.0.vsix"
-            ChecksumMD5 = '1AC0C61B7FB1D88C2193CFB8E8E38519' # $checkSumSha256="C8B3E77EF18B8F5190B4B9BB6BA6996CB528B8F2D6BC34B373BB2242D71F3F43"
+            ChecksumMD5 = 'A2815612F09E826376C6F62B7BF8A47F' # $checkSumSha256=""
             Url         = "https://github.gallerycdn.vsassets.io/extensions/github/copilotvs/1.133.0.0/1699306328409/$($this.FileName)"; <# https://marketplace.visualstudio.com/items?itemName=MikeWard-AnnArbor.VSColorOutput64 #>
             Checksum    = $this.ChecksumMD5;
         }
